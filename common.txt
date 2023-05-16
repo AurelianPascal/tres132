@@ -1,0 +1,36 @@
+CREATE PROCEDURE InsertCommonColumns
+    @source_table NVARCHAR(128),
+    @target_table NVARCHAR(128)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @columns NVARCHAR(MAX) = '';
+
+    SELECT @columns = STRING_AGG(c.column_name, ',')
+    FROM information_schema.columns AS c
+    WHERE c.table_name = @source_table AND c.table_schema = 'dbo'
+    AND c.column_name IN (
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name = @target_table AND table_schema = 'dbo'
+    );
+
+    DECLARE @sql NVARCHAR(MAX) = '
+    INSERT INTO ' + QUOTENAME(@target_table) + ' (' + @columns + ')
+    SELECT ' + @columns + '
+    FROM ' + QUOTENAME(@source_table) + ';';
+
+    EXEC sp_executesql @sql;
+END;
+You can create the stored procedure by executing the above script. It creates a stored procedure named InsertCommonColumns that accepts @source_table and @target_table as parameters.
+
+To call the stored procedure with a pair of tables, you can use the following code:
+
+sql
+Copy code
+DECLARE 
+    @source_table NVARCHAR(128) = 'TableA',
+    @target_table NVARCHAR(128) = 'TableB';
+
+EXEC InsertCommonColumns @source_table, @target_table;

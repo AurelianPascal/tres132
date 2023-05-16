@@ -1,0 +1,51 @@
+-- Pair 1
+DECLARE @source_table1 NVARCHAR(128) = 'TableA';
+DECLARE @target_table1 NVARCHAR(128) = 'TableB';
+
+-- Pair 2
+DECLARE @source_table2 NVARCHAR(128) = 'TableC';
+DECLARE @target_table2 NVARCHAR(128) = 'TableD';
+
+DECLARE @sql NVARCHAR(MAX) = '';
+
+-- Pair 1
+SET @sql += '
+INSERT INTO ' + QUOTENAME(@target_table1) + ' (' + 
+    STUFF((
+        SELECT ', ' + QUOTENAME(c1.column_name)
+        FROM information_schema.columns AS c1
+        JOIN information_schema.columns AS c2 ON c1.column_name = c2.column_name
+        WHERE c1.table_name = @source_table1 AND c1.table_schema = 'dbo'
+            AND c2.table_name = @target_table1 AND c2.table_schema = 'dbo'
+        FOR XML PATH('')), 1, 2, '') + ')
+SELECT ' +
+    STUFF((
+        SELECT ', ' + QUOTENAME(c1.column_name)
+        FROM information_schema.columns AS c1
+        JOIN information_schema.columns AS c2 ON c1.column_name = c2.column_name
+        WHERE c1.table_name = @source_table1 AND c1.table_schema = 'dbo'
+            AND c2.table_name = @target_table1 AND c2.table_schema = 'dbo'
+        FOR XML PATH('')), 1, 2, '') + '
+FROM ' + QUOTENAME(@source_table1) + ';';
+
+-- Pair 2
+SET @sql += '
+INSERT INTO ' + QUOTENAME(@target_table2) + ' (' + 
+    STUFF((
+        SELECT ', ' + QUOTENAME(c1.column_name)
+        FROM information_schema.columns AS c1
+        JOIN information_schema.columns AS c2 ON c1.column_name = c2.column_name
+        WHERE c1.table_name = @source_table2 AND c1.table_schema = 'dbo'
+            AND c2.table_name = @target_table2 AND c2.table_schema = 'dbo'
+        FOR XML PATH('')), 1, 2, '') + ')
+SELECT ' +
+    STUFF((
+        SELECT ', ' + QUOTENAME(c1.column_name)
+        FROM information_schema.columns AS c1
+        JOIN information_schema.columns AS c2 ON c1.column_name = c2.column_name
+        WHERE c1.table_name = @source_table2 AND c1.table_schema = 'dbo'
+            AND c2.table_name = @target_table2 AND c2.table_schema = 'dbo'
+        FOR XML PATH('')), 1, 2, '') + '
+FROM ' + QUOTENAME(@source_table2) + ';';
+
+EXEC sp_executesql @sql;
