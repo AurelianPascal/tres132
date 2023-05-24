@@ -1,0 +1,33 @@
+# Define your server and credentials
+$server = "<server-name>.database.windows.net"
+$user = "<username>"
+$password = "<password>"
+$outDirectory = "C:\temp\BCP"  # Make sure this directory exists
+
+# Connect to source database
+$sqlConn = New-Object System.Data.SqlClient.SqlConnection
+$sqlConn.ConnectionString = "Server = tcp:$server,1433; Database = testdb; Uid = $user; Pwd = $password; Encrypt = yes; TrustServerCertificate = no;"
+
+# Create a command to get the list of tables
+$sqlCmd = New-Object System.Data.SqlClient.SqlCommand
+$sqlCmd.CommandText = "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'acbc'"
+$sqlCmd.Connection = $sqlConn
+
+# Open the connection and execute the command
+$sqlConn.Open()
+$reader = $sqlCmd.ExecuteReader()
+
+# Loop through each table
+while ($reader.Read()) {
+    $tableName = $reader.GetValue(0)
+    $outFileName = "$outDirectory\$tableName.dat"
+    
+    # Export data from source database to a file
+    bcp "testdb.acbc.$tableName" out $outFileName -S $server -U $user -P $password -n
+
+    # Import data from the file to destination database
+    bcp "livedb.acbc.$tableName" in $outFileName -S $server -U $user -P $password -n
+}
+
+# Close the connection
+$sqlConn.Close()
