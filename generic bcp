@@ -1,0 +1,3 @@
+bcp acbc.<tablename> out <filepath>\<filename>.dat -S <server-name>.database.windows.net -d testdb -U <username> -P <password> -n
+
+bcp livedb.<tablename> in <filepath>\<filename>.dat -S <server-name>.database.windows.net -d livedb -U <username> -P <password> -n
