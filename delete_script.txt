@@ -1,0 +1,13 @@
+DELETE FROM your_table
+WHERE (ID, date_col) IN (
+    SELECT ID, date_col
+    FROM your_table
+    WHERE date_col = '2099-01-01 00:00:00'
+    GROUP BY ID, date_col
+    HAVING COUNT(DISTINCT VERSION) > 1
+) AND VERSION < (
+    SELECT MAX(VERSION)
+    FROM your_table AS t2
+    WHERE t2.ID = your_table.ID
+    AND t2.date_col = your_table.date_col
+);
