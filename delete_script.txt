@@ -34,3 +34,12 @@ WHERE (data1, data2, date_col, VERSION) IN (
     GROUP BY data1, data2, date_col, VERSION
     HAVING COUNT(*) > 1
 );
+
+--------------------
+
+;WITH CTE AS (
+    SELECT data1, data2, date_col, VERSION,
+           ROW_NUMBER() OVER (PARTITION BY data1, data2, date_col, VERSION ORDER BY (SELECT 0)) AS RN
+    FROM your_table
+)
+DELETE FROM CTE WHERE RN > 1;
