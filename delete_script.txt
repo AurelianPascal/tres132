@@ -11,3 +11,26 @@ WHERE (ID, date_col) IN (
     WHERE t2.ID = your_table.ID
     AND t2.date_col = your_table.date_col
 );
+
+
+SELECT data1, data2, date_col, VERSION, COUNT(*) AS duplicate_count
+FROM your_table
+GROUP BY data1, data2, date_col, VERSION
+HAVING COUNT(*) > 1;
+
+
+DELETE FROM your_table
+WHERE (data1, data2, date_col, VERSION) IN (
+    SELECT data1, data2, date_col, VERSION
+    FROM your_table
+    GROUP BY data1, data2, date_col, VERSION
+    HAVING COUNT(*) > 1
+);
+
+DELETE FROM your_table
+WHERE (data1, data2, date_col, VERSION) IN (
+    SELECT data1, data2, date_col, VERSION
+    FROM your_table
+    GROUP BY data1, data2, date_col, VERSION
+    HAVING COUNT(*) > 1
+);
