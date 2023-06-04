@@ -1,0 +1,41 @@
+@echo off
+
+setlocal enabledelayedexpansion
+
+set /p retryCount=Enter the number of retries:
+
+REM Define the list of commands
+set "commands=command1 command2 command3 command4 command5"
+
+REM Iterate over the list of commands
+for %%c in (%commands%) do (
+    set command=%%c
+    
+    REM Initialize retry counter
+    set retry=0
+
+    :RETRY
+
+    REM Increment the retry counter
+    set /A retry+=1
+
+    REM Execute the command
+    echo Running command: !command!
+    !command!
+
+    REM Check the error level
+    IF !ERRORLEVEL! NEQ 0 (
+        IF !retry! LSS %retryCount% (
+            echo Error occurred for command !command!. Retrying...
+            goto RETRY
+        ) ELSE (
+            echo Error: Maximum retry attempts reached for command !command!.
+            exit /b 1
+        )
+    )
+
+    echo Command !command! completed successfully.
+)
+
+echo All commands completed successfully.
+exit /b 0
