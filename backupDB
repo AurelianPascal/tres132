@@ -1,1 +1,7 @@
 BACKUP DATABASE YourDatabaseName TABLE = (schema1.table1, schema2.table2, ..., schemaN.tableN) TO DISK = 'C:\YourBackupPath\YourBackupFile.bak' WITH INIT, FORMAT;
+
+
+
+BACKUP TABLE YourSourceDatabase.schema.YourTable
+   TO DISK = 'C:\YourBackupPath\YourBackupFile.bak';
+
