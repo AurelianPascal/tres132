@@ -10,3 +10,20 @@ WITH CTE AS (
     FROM YourTable
 )
 DELETE FROM CTE WHERE row_num > 1;
+
+
+
+
+
+
+
+-------------
+WITH cte AS (
+  SELECT *,
+    ROW_NUMBER() OVER (
+      PARTITION BY id, reference, `reference type`
+      ORDER BY CAST(version AS INT) DESC
+    ) row_num
+  FROM my_table
+)
+DELETE FROM cte WHERE row_num > 1;
