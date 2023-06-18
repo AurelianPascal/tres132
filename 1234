@@ -2,3 +2,11 @@ DELETE t1
 FROM YourTable t1
 INNER JOIN YourTable t2 ON t1.userid = t2.userid
 WHERE t1.rowid > t2.rowid;
+
+
+WITH CTE AS (
+    SELECT userid,
+           ROW_NUMBER() OVER (PARTITION BY userid ORDER BY (SELECT NULL)) AS row_num
+    FROM YourTable
+)
+DELETE FROM CTE WHERE row_num > 1;
