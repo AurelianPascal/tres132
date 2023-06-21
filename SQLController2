@@ -1,0 +1,73 @@
+import org.springframework.jdbc.core.RowMapper;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+
+public class SQLController {
+
+    public static RowMapper<String> stringRowMapper() {
+        return new RowMapper<String>() {
+            @Override
+            public String mapRow(ResultSet rs, int rowNum) throws SQLException {
+                return rs.getString(1);
+            }
+        };
+    }
+}
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+import org.springframework.jdbc.core.RowMapper;
+
+import java.sql.ResultSet;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+public class SQLControllerTest {
+
+    @Test
+    public void testStringRowMapper() throws Exception {
+        // Arrange
+        String expectedValue = "test";
+        ResultSet rs = Mockito.mock(ResultSet.class);
+        Mockito.when(rs.getString(1)).thenReturn(expectedValue);
+
+        // Act
+        RowMapper<String> rowMapper = SQLController.stringRowMapper();
+        String result = rowMapper.mapRow(rs, 1);
+
+        // Assert
+        assertEquals(expectedValue, result);
+    }
+}
+
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.List;
+
+@RestController
+public class SQLController {
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @PostMapping("/run-sql")
+    public List<String> runSQL(@RequestBody String sql) {
+        return jdbcTemplate.query(sql, stringRowMapper());
+    }
+
+    private RowMapper<String> stringRowMapper() {
+        return new RowMapper<String>() {
+            @Override
+            public String mapRow(ResultSet rs, int rowNum) throws SQLException {
+                return rs.getString(1);
+            }
+        };
+    }
+}
