@@ -70,3 +70,24 @@ spec:
               image: {{ .Values.cronJob.image.repository }}:{{ .Values.cronJob.image.tag }}
               # Add other container configuration as needed
           restartPolicy: OnFailure
+
+
+---
+
+-- Step 1: Create a new partition function
+CREATE PARTITION FUNCTION pf_event (VARCHAR(30))
+AS RANGE LEFT FOR VALUES ();
+
+-- Step 2: Create a new partition scheme
+CREATE PARTITION SCHEME ps_event
+AS PARTITION pf_event
+ALL TO ([PRIMARY]);
+
+-- Step 3: Add the new partition to the existing table
+ALTER TABLE event
+    ADD CONSTRAINT PK_event PRIMARY KEY CLUSTERED (datatype)
+    ON ps_event(datatype);
+
+-- Step 4: Optionally, drop the existing primary key constraint
+ALTER TABLE event
+    DROP CONSTRAINT <existing_primary_key_constraint_name>;
