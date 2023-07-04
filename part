@@ -1,0 +1,72 @@
+-- Step 1: Create a new partition function
+CREATE PARTITION FUNCTION pf_event (VARCHAR(30))
+AS RANGE LEFT FOR VALUES ();
+
+-- Step 2: Create a new partition scheme
+CREATE PARTITION SCHEME ps_event
+AS PARTITION pf_event
+ALL TO ([PRIMARY]);
+
+-- Step 3: Create a new partitioned table
+CREATE TABLE event_new (
+  datatype VARCHAR(30),
+  info VARCHAR(30)
+) ON ps_event(datatype);
+
+-- Step 4: Switch data into the new partitioned table
+ALTER TABLE event SWITCH TO event_new;
+
+-- Step 5: Optionally, drop the old table
+DROP TABLE event;
+
+
+-------------------------------------------------------------------------------
+
+
+-- Step 1: Create a partition function
+CREATE PARTITION FUNCTION myPartitionFunction (int)
+AS RANGE RIGHT FOR VALUES (1, 2, 3, 4, 5, 6, 7, 8, 9);
+
+-- Step 2: Create a partition scheme
+CREATE PARTITION SCHEME myPartitionScheme
+AS PARTITION myPartitionFunction
+ALL TO ([PRIMARY]);
+
+-- Step 3: Add a persisted computed column to the table
+ALTER TABLE event 
+ADD datatype_hash AS (CHECKSUM(datatype)) PERSISTED;
+
+-- Step 4: Create a clustered index on the computed column using the partition scheme
+CREATE CLUSTERED INDEX idx_event_datatype_hash
+ON event (datatype_hash)
+ON myPartitionScheme (datatype_hash);
+
+
+---------------
+
+# values.yaml
+cronJob:
+  name: my-cronjob
+  schedule: "0 * * * *"
+  image:
+    repository: your/image-repository
+    tag: latest
+
+----------------------
+
+# templates/cronjob.yaml
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: {{ .Values.cronJob.name }}
+spec:
+  schedule: {{ .Values.cronJob.schedule }}
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: {{ .Values.cronJob.name }}
+              image: {{ .Values.cronJob.image.repository }}:{{ .Values.cronJob.image.tag }}
+              # Add other container configuration as needed
+          restartPolicy: OnFailure
