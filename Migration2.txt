@@ -1,0 +1,18 @@
+create a DataBricks workspace with the following:
+0. Solve problem for n=1 datatype. Start with one small datatype and a moderately sized cluster - will calc optimum later.
+1. Setup Cosmos connector & connection details
+2. Create custom queries to pull back a partition of a given cosmos collection / aqua datatype.
+3. Load the Cosmos documents readQuery.load() from above into a Spark data frame
+4. Load the DataFrame into a Temp View 'createOrReplaceTempView()' , use SQL to query.
+5. verify count: select count(1) from DataType. 
+
+Check # of partitions in cosmos for given datatype. Each Databricks processor will hit one of these partitions.
+
+6. Setup Mongo Connector & connection details.
+7. Write Docs into mongoDB with a tuned batchsize. 
+(decide whether to use:upsert or overwrite docs option).
+
+
+Listen To Cosmos change feed to keep data in sync .
+
+Repeat process for all datatype.
