@@ -1,0 +1,45 @@
+from pyspark.sql import SparkSession
+
+# Set up Cosmos DB connection configuration
+cosmosdb_config = {
+  "Endpoint": "<Cosmos DB Endpoint>",
+  "Masterkey": "<Cosmos DB Master Key>",
+  "Database": "<Database Name>",
+  "Collection": "<Collection Name>",
+  "ReadChangeFeed": "true"  # Enable change feed to track progress
+}
+
+# Set up MongoDB connection configuration
+mongodb_config = {
+  "uri": "mongodb://<MongoDB Connection URI>",
+  "database": "<Database Name>",
+  "collection": "<Collection Name>"
+}
+
+# Set batch size
+batch_size = 1000
+
+# Create a Spark session
+spark = SparkSession.builder.appName("CosmosDB to MongoDB Migration").getOrCreate()
+
+# Read data from Cosmos DB
+cosmosdb_df = spark.read.format("cosmos.oltp").options(**cosmosdb_config).load()
+
+# Determine the number of batches based on the total number of documents
+num_batches = cosmosdb_df.count() // batch_size
+
+# Process and write data in batches
+for i in range(num_batches + 1):
+    # Select a batch of data
+    start = i * batch_size
+    end = (i + 1) * batch_size
+    batch_df = cosmosdb_df.limit(end).filter(f"_ts > {last_processed_timestamp}")  # Use change feed to track progress if available
+
+    # Perform data transformations if needed
+    transformed_df = batch_df.select("column1", "column2", ...)  # Select required columns
+
+    # Write the batch to MongoDB
+    transformed_df.write.format("mongo").options(**mongodb_config).mode("append").save()
+
+# Stop the Spark session
+spark.stop()
