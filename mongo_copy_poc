@@ -1,0 +1,41 @@
+from pyspark.sql import SparkSession
+
+# Set up Cosmos DB connection configuration
+cosmosdb_config = {
+  "Endpoint": "<Cosmos DB Endpoint>",
+  "Masterkey": "<Cosmos DB Master Key>",
+  "Database": "<Database Name>",
+  "Collection": "<Collection Name>",
+  "ReadChangeFeed": "true"  # Enable change feed to track progress
+}
+
+# Set up MongoDB connection configuration
+mongodb_config = {
+  "uri": "mongodb://<MongoDB Connection URI>",
+  "database": "<Database Name>",
+  "collection": "<Collection Name>"
+}
+
+# Set batch size
+batch_size = 1000
+
+# Create a Spark session
+spark = SparkSession.builder.appName("CosmosDB to MongoDB Migration").getOrCreate()
+
+# Read data from Cosmos DB using query
+try:
+    query = f"SELECT TOP {batch_size} * FROM c WHERE c.DataType = '<Your DataType>'"
+    cosmosdb_df = spark.read.format("cosmos.oltp").options(**cosmosdb_config).option("query", query).load()
+
+    # Perform data transformations if needed
+    transformed_df = cosmosdb_df.select("column1", "column2", ...)  # Select required columns
+
+    # Write the transformed data to MongoDB
+    transformed_df.write.format("mongo").options(**mongodb_config).mode("append").save()
+
+except Exception as e:
+    # Handle the error, log or perform any necessary actions
+    print(f"Error occurred during data migration: {str(e)}")
+
+# Stop the Spark session
+spark.stop()
