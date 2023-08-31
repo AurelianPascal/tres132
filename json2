@@ -1,0 +1,53 @@
+import org.json.JSONObject;
+import org.json.JSONArray;
+
+public class JSONSpecialCharacterChecker {
+    public static void main(String[] args) {
+        JSONObject jsonObject = new JSONObject();
+        jsonObject.put("name", "John'O;Connor");
+        jsonObject.put("age", 30);
+        jsonObject.put("address", "123 Main St.;");
+        
+        boolean hasSpecialCharacters = containsSpecialCharacters(jsonObject);
+        
+        System.out.println("JSON contains special characters? " + hasSpecialCharacters);
+    }
+    
+    public static boolean containsSpecialCharacters(JSONObject jsonObject) {
+        for (String key : jsonObject.keySet()) {
+            Object value = jsonObject.get(key);
+            
+            if (value instanceof JSONObject) {
+                if (containsSpecialCharacters((JSONObject) value)) {
+                    return true;
+                }
+            } else if (value instanceof JSONArray) {
+                JSONArray jsonArray = (JSONArray) value;
+                for (int i = 0; i < jsonArray.length(); i++) {
+                    Object arrayElement = jsonArray.get(i);
+                    if (arrayElement instanceof String && containsSpecialCharactersInString((String) arrayElement)) {
+                        return true;
+                    } else if (arrayElement instanceof JSONObject && containsSpecialCharacters((JSONObject) arrayElement)) {
+                        return true;
+                    }
+                }
+            } else if (value instanceof String) {
+                if (containsSpecialCharactersInString((String) value)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    
+    public static boolean containsSpecialCharactersInString(String str) {
+        // Define your special characters here
+        String specialCharacters = "[;'!@#$%^&*()]";
+        for (char ch : specialCharacters.toCharArray()) {
+            if (str.indexOf(ch) != -1) {
+                return true;
+            }
+        }
+        return false;
+    }
+}
