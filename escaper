@@ -1,0 +1,104 @@
+import org.json.JSONObject;
+import org.json.JSONArray;
+
+public class JSONSpecialCharacterEscaper {
+
+    public static void main(String[] args) {
+        JSONObject jsonObject = new JSONObject();
+        
+        jsonObject.put("name", "John'O;Connor");
+        jsonObject.put("age", 30);
+        jsonObject.put("address", "123 Main St.;");
+        
+        JSONArray friends = new JSONArray();
+        friends.put("Sarah';Doe");
+        friends.put("Mike'O");
+        
+        JSONObject nestedObj = new JSONObject();
+        nestedObj.put("school", "St.John's;");
+        nestedObj.put("grade", "A';+");
+        
+        jsonObject.put("friends", friends);
+        jsonObject.put("details", nestedObj);
+        
+        escapeSpecialCharacters(jsonObject);
+        
+        System.out.println(jsonObject.toString(4));
+    }
+    
+    public static void escapeSpecialCharacters(JSONObject jsonObject) {
+        for (String key : jsonObject.keySet()) {
+            Object value = jsonObject.get(key);
+            
+            if (value instanceof JSONObject) {
+                escapeSpecialCharacters((JSONObject) value);
+            } else if (value instanceof JSONArray) {
+                JSONArray jsonArray = (JSONArray) value;
+                for (int i = 0; i < jsonArray.length(); i++) {
+                    Object arrayElement = jsonArray.get(i);
+                    if (arrayElement instanceof String) {
+                        jsonArray.put(i, escapeSpecialCharactersInString((String) arrayElement));
+                    } else if (arrayElement instanceof JSONObject) {
+                        escapeSpecialCharacters((JSONObject) arrayElement);
+                    }
+                }
+            } else if (value instanceof String) {
+                jsonObject.put(key, escapeSpecialCharactersInString((String) value));
+            }
+        }
+    }
+    
+    public static String escapeSpecialCharactersInString(String str) {
+        return str.replace(";", "\\;").replace("'", "\\'");
+    }
+}
+
+import org.json.JSONObject;
+import org.json.JSONArray;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+public class JSONSpecialCharacterEscaperTest {
+
+    @Test
+    public void testEscapingInSimpleString() {
+        JSONObject jsonObject = new JSONObject();
+        jsonObject.put("name", "John'O;Connor");
+        JSONSpecialCharacterEscaper.escapeSpecialCharacters(jsonObject);
+        assertEquals("John\\'O\\;Connor", jsonObject.getString("name"));
+    }
+
+    @Test
+    public void testNoEscapingInSimpleString() {
+        JSONObject jsonObject = new JSONObject();
+        jsonObject.put("name", "John Connor");
+        JSONSpecialCharacterEscaper.escapeSpecialCharacters(jsonObject);
+        assertEquals("John Connor", jsonObject.getString("name"));
+    }
+
+    @Test
+    public void testEscapingInJSONArray() {
+        JSONArray jsonArray = new JSONArray();
+        jsonArray.put("Sarah';Doe");
+        jsonArray.put("Mike'O");
+        JSONObject jsonObject = new JSONObject();
+        jsonObject.put("friends", jsonArray);
+        JSONSpecialCharacterEscaper.escapeSpecialCharacters(jsonObject);
+        assertEquals("Sarah\\'\\;Doe", ((JSONArray) jsonObject.get("friends")).getString(0));
+        assertEquals("Mike\\'O", ((JSONArray) jsonObject.get("friends")).getString(1));
+    }
+
+    @Test
+    public void testEscapingInNestedJSONObject() {
+        JSONObject nestedObj = new JSONObject();
+        nestedObj.put("school", "St.John's;");
+        nestedObj.put("grade", "A';+");
+        JSONObject jsonObject = new JSONObject();
+        jsonObject.put("details", nestedObj);
+        JSONSpecialCharacterEscaper.escapeSpecialCharacters(jsonObject);
+        JSONObject details = jsonObject.getJSONObject("details");
+        assertEquals("St.John\\'s\\;", details.getString("school"));
+        assertEquals("A\\'\\;+", details.getString("grade"));
+    }
+}
+
