@@ -1,0 +1,170 @@
+import org.json.JSONObject;
+import org.json.JSONArray;
+
+public class JSONSpecialCharacterCheckerTest {
+
+    public static void main(String[] args) {
+        testComplexJSON();
+       // testComplexJSON();
+        testJSONWithoutSpecialCharacters();
+        testNestedJSONWithoutSpecialCharacters();
+        testJSONArrayWithoutSpecialCharacters();
+        testNestedJSONArrayWithoutSpecialCharacters();
+        testNonStringValues();
+
+    }
+
+    public static void testComplexJSON2() {
+        JSONObject jsonObject = new JSONObject();
+
+        jsonObject.put("name", "John'O;Connor");
+        jsonObject.put("age", 30);
+        jsonObject.put("address", "123 Main St.;");
+
+        JSONArray friends = new JSONArray();
+        friends.put("Sarah';Doe");
+        friends.put("Mike'O");
+
+        JSONObject nestedObj = new JSONObject();
+        nestedObj.put("school", "St.John's;");
+        nestedObj.put("grade", "A';+");
+
+        jsonObject.put("friends", friends);
+        jsonObject.put("details", nestedObj);
+
+        boolean hasSpecialCharacters = containsSpecialCharacters(jsonObject);
+
+        if(hasSpecialCharacters) {
+            System.out.println("Test Passed: JSON contains special characters.");
+        } else {
+            System.out.println("Test Failed: JSON doesn't contain special characters.");
+        }
+    }
+
+    public static boolean containsSpecialCharacters(JSONObject jsonObject) {
+        for (String key : jsonObject.keySet()) {
+            Object value = jsonObject.get(key);
+
+            if (value instanceof JSONObject) {
+                if (containsSpecialCharacters((JSONObject) value)) {
+                    return true;
+                }
+            } else if (value instanceof JSONArray) {
+                JSONArray jsonArray = (JSONArray) value;
+                for (int i = 0; i < jsonArray.length(); i++) {
+                    Object arrayElement = jsonArray.get(i);
+                    if (arrayElement instanceof String && containsSpecialChars((String) arrayElement)) {
+                        return true;
+                    } else if (arrayElement instanceof JSONObject && containsSpecialCharacters((JSONObject) arrayElement)) {
+                        return true;
+                    }
+                }
+            } else if (value instanceof String) {
+                if (containsSpecialChars((String) value)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    public static boolean containsSpecialChars(String str) {
+        String badChars = ";'";
+        for (char ch : badChars.toCharArray()) {
+            if (str.indexOf(ch) != -1) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+
+//    public static void testComplexJSON() {
+//         (same as the previous answer)
+//
+//        assertResult(hasSpecialCharacters, true, "testComplexJSON");
+//    }
+
+    public static void testJSONWithoutSpecialCharacters() {
+        JSONObject jsonObject = new JSONObject();
+        jsonObject.put("name", "Joe Smith");
+        jsonObject.put("age", 25);
+        jsonObject.put("address", "10 London Road.");
+
+        boolean hasSpecialCharacters = containsSpecialCharacters(jsonObject);
+
+        assertResult(hasSpecialCharacters, false, "testJSONWithoutSpecialCharacters");
+    }
+
+    public static void testNestedJSONWithoutSpecialCharacters() {
+        JSONObject nested = new JSONObject();
+        nested.put("school", "St. Johns");
+        nested.put("grade", "A+");
+
+        JSONObject jsonObject = new JSONObject();
+        jsonObject.put("details", nested);
+
+        boolean hasSpecialCharacters = containsSpecialCharacters(jsonObject);
+
+        assertResult(hasSpecialCharacters, false, "testNestedJSONWithoutSpecialCharacters");
+    }
+
+    public static void testJSONArrayWithoutSpecialCharacters() {
+        JSONArray jsonArray = new JSONArray();
+        jsonArray.put("Sarah Doe");
+        jsonArray.put("Mike");
+
+        boolean hasSpecialCharacters = containsSpecialCharactersInArray(jsonArray);
+
+        assertResult(hasSpecialCharacters, false, "testJSONArrayWithoutSpecialCharacters");
+    }
+
+    public static void testNestedJSONArrayWithoutSpecialCharacters() {
+        JSONArray innerArray = new JSONArray();
+        innerArray.put("Sarah Doe");
+        innerArray.put("Mike");
+
+        JSONArray jsonArray = new JSONArray();
+        jsonArray.put(innerArray);
+
+        boolean hasSpecialCharacters = containsSpecialCharactersInArray(jsonArray);
+
+        assertResult(hasSpecialCharacters, false, "testNestedJSONArrayWithoutSpecialCharacters");
+    }
+
+    public static void testNonStringValues() {
+        JSONObject jsonObject = new JSONObject();
+        jsonObject.put("age", 30);
+        jsonObject.put("isActive", true);
+        jsonObject.put("rating", 4.5);
+
+        boolean hasSpecialCharacters = containsSpecialCharacters(jsonObject);
+
+        assertResult(hasSpecialCharacters, false, "testNonStringValues");
+    }
+
+    // Helper function for assertion
+    public static void assertResult(boolean actual, boolean expected, String methodName) {
+        if (actual == expected) {
+            System.out.println(methodName + ": Passed");
+        } else {
+            System.out.println(methodName + ": Failed");
+        }
+    }
+
+    // ... (same containsSpecialCharacters and containsSpecialCharactersInString methods as before)
+
+    public static boolean containsSpecialCharactersInArray(JSONArray jsonArray) {
+        for (int i = 0; i < jsonArray.length(); i++) {
+            Object arrayElement = jsonArray.get(i);
+            if (arrayElement instanceof String && containsSpecialChars((String) arrayElement)) {
+                return true;
+            } else if (arrayElement instanceof JSONObject && containsSpecialCharacters((JSONObject) arrayElement)) {
+                return true;
+            } else if (arrayElement instanceof JSONArray && containsSpecialCharactersInArray((JSONArray) arrayElement)) {
+                return true;
+            }
+        }
+        return false;
+    }
+}
