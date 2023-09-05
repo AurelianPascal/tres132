@@ -1,0 +1,95 @@
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import java.io.IOException;
+import java.util.Iterator;
+import java.util.Map.Entry;
+
+public class Test {
+
+    public static void printCsvFromJson(String jsonString) {
+        ObjectMapper objectMapper = new ObjectMapper();
+        try {
+            JsonNode rootNode = objectMapper.readTree(jsonString);
+            printNodeAsCsv(rootNode, "");
+        } catch (IOException e) {
+            System.err.println("Error parsing JSON: " + e.getMessage());
+        }
+    }
+
+    private static void printNodeAsCsv(JsonNode node, String parentKey) {
+        Iterator<Entry<String, JsonNode>> fieldsIterator = node.fields();
+        while (fieldsIterator.hasNext()) {
+            Entry<String, JsonNode> field = fieldsIterator.next();
+            String formattedKey = parentKey.isEmpty() ? field.getKey().toUpperCase() : parentKey + "." + field.getKey();
+
+            if (field.getValue().isObject()) {
+                printNodeAsCsv(field.getValue(), formattedKey);
+            } else if (field.getValue().isArray()) {
+                int index = 0;
+                for (JsonNode item : field.getValue()) {
+                    String arrayKey = formattedKey + "[" + index + "]";
+                    printNodeAsCsv(item, arrayKey);
+                    index++;
+                }
+            } else {
+                System.out.println(formattedKey + "=" + "\"" + field.getValue().asText() + "\"");
+            }
+        }
+    }
+
+    public static void main(String[] args) {
+        String flatSampleJson = "[{\"name\":\"John\",\"age\":30,\"city\":\"New York\"},{\"name\":\"Jane\",\"age\":25,\"city\":\"Boston\"}]";
+        System.out.println("Flat JSON Sample:");
+        printCsvFromJson(flatSampleJson);
+
+        String complexSampleJson = "{\"person\":{\"name\":\"John\",\"address\":{\"city\":\"New York\",\"zip\":\"10001\"},\"contacts\":[{\"type\":\"email\",\"value\":\"john@example.com\"},{\"type\":\"phone\",\"value\":\"1234567890\"}]}}";
+        System.out.println("\nComplex JSON Sample:");
+        printCsvFromJson(complexSampleJson);
+
+    String cdsJson = "" +
+            "{\n" +
+            "  \"creditDefaultSwap\": {\n" +
+            "    \"referenceEntity\": \"XYZ Corporation\",\n" +
+            "    \"notionalAmount\": 5000000,\n" +
+            "    \"currency\": \"USD\",\n" +
+            "    \"maturityDate\": \"2024-12-31\",\n" +
+            "    \"effectiveDate\": \"2022-01-01\",\n" +
+            "    \"fixedRate\": 0.02,\n" +
+            "    \"paymentFrequency\": \"Quarterly\",\n" +
+            "    \"dayCountFraction\": \"ACT/360\",\n" +
+            "    \"spread\": 0.015,\n" +
+            "    \"buyer\": \"John Doe\",\n" +
+            "    \"seller\": \"Jane Smith\"\n" +
+            "  }\n" +
+            "}," +
+            "{\n" +
+            "  \"bond\": {\n" +
+            "    \"referenceEntity\": \"Abc Corporation\",\n" +
+            "    \"Amount\": 1000000,\n" +
+            "  }\n" +
+            "}" ;
+        System.out.println("\nCDS JSON Sample:");
+        printCsvFromJson(cdsJson);
+        System.out.println("\nexample JSON Sample:");
+        String example = "{\"isbn\": \"123-456-222\",  \n" +
+                " \"author\": \n" +
+                "    {\n" +
+                "      \"lastname\": \"Doe\",\n" +
+                "      \"firstname\": \"Jane\"\n" +
+                "    },\n" +
+                "\"editor\": \n" +
+                "    {\n" +
+                "      \"lastname\": \"Smith\",\n" +
+                "      \"firstname\": \"Jane\"\n" +
+                "    },\n" +
+                "  \"title\": \"The Ultimate Database Study Guide\",  \n" +
+                "  \"category\": [\"Non-Fiction\", \"Technology\"]\n" +
+                " }";
+
+        printCsvFromJson(example);
+    }
+
+
+
+}
