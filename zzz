@@ -1,0 +1,178 @@
+import org.springframework.stereotype.Component;
+
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.LongStream;
+
+@Component
+public class LatencyCache {
+
+    private final ConcurrentMap<String, ConcurrentMap<Long, AtomicLong>> cache = new ConcurrentHashMap<>();
+
+    public void addLatency(String msgType, long latency) {
+        long currentSecond = System.currentTimeMillis() / 1000; // convert to seconds
+
+        cache.computeIfAbsent(msgType, k -> new ConcurrentHashMap<>())
+             .computeIfAbsent(currentSecond, k -> new AtomicLong())
+             .addAndGet(latency);
+    }
+
+    public long getLatencyForSecond(String msgType, long second) {
+        return cache.getOrDefault(msgType, new ConcurrentHashMap<>())
+                    .getOrDefault(second, new AtomicLong(0))
+                    .get();
+    }
+
+    public long[] getLatenciesForLastXMinutes(String msgType, int x) {
+        long currentSecond = System.currentTimeMillis() / 1000;
+        long startSecond = currentSecond - x * 60; // 60 seconds in a minute
+
+        ConcurrentMap<Long, AtomicLong> typeCache = cache.getOrDefault(msgType, new ConcurrentHashMap<>());
+
+        return LongStream.rangeClosed(startSecond, currentSecond)
+                         .map(second -> typeCache.getOrDefault(second, new AtomicLong(0)).get())
+                         .toArray();
+    }
+}
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+@Component
+public class LatencyTracker {
+
+    @Autowired
+    private LatencyCache latencyCache;
+
+    public void addLatency(String msgType, long latency) {
+        latencyCache.addLatency(msgType, latency);
+    }
+
+    public long getAverageLatencyForLastSecond(String msgType) {
+        long currentSecond = System.currentTimeMillis() / 1000;
+        return latencyCache.getLatencyForSecond(msgType, currentSecond - 1);
+    }
+
+    public double getAverageLatencyForLastXMinutes(String msgType, int x) {
+        long[] latencies = latencyCache.getLatenciesForLastXMinutes(msgType, x);
+        double totalLatency = 0;
+        for (long latency : latencies) {
+            totalLatency += latency;
+        }
+        return totalLatency / (x * 60); // totalLatency divided by total seconds in x minutes
+    }
+}
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+@Service
+public class DataHandler {
+
+    @Autowired
+    private LatencyTracker latencyTracker;
+
+    public void apply(Object message, String msgType) {
+        long startTime = System.currentTimeMillis();
+
+        // Your message processing logic here
+
+        long endTime = System.currentTimeMillis();
+        latencyTracker.addLatency(msgType, endTime - startTime);
+    }
+}
+
+import static org.junit.Assert.assertEquals;
+import org.junit.Before;
+import org.junit.Test;
+
+public class LatencyCacheTest {
+
+    private LatencyCache latencyCache;
+
+    @Before
+    public void setUp() {
+        latencyCache = new LatencyCache();
+    }
+
+    @Test
+    public void testAddAndGetLatency() {
+        latencyCache.addLatency("testType", 100);
+        long latency = latencyCache.getLatencyForSecond("testType", System.currentTimeMillis() / 1000);
+        assertEquals(100, latency);
+    }
+
+    @Test
+    public void testGetLatenciesForLastXMinutes() {
+        latencyCache.addLatency("testType", 100);
+        long[] latencies = latencyCache.getLatenciesForLastXMinutes("testType", 1);
+        assertEquals(100, latencies[latencies.length - 1]);
+    }
+}
+
+import static org.junit.Assert.assertEquals;
+import org.junit.Before;
+import org.junit.Test;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+import static org.mockito.Mockito.*;
+
+public class LatencyTrackerTest {
+
+    @InjectMocks
+    private LatencyTracker latencyTracker;
+
+    @Mock
+    private LatencyCache latencyCache;
+
+    @Before
+    public void setUp() {
+        MockitoAnnotations.initMocks(this);
+    }
+
+    @Test
+    public void testAddLatency() {
+        latencyTracker.addLatency("testType", 100);
+        verify(latencyCache, times(1)).addLatency(eq("testType"), eq(100L));
+    }
+
+    @Test
+    public void testGetAverageLatencyForLastSecond() {
+        when(latencyCache.getLatencyForSecond("testType", System.currentTimeMillis() / 1000)).thenReturn(100L);
+        long latency = latencyTracker.getAverageLatencyForLastSecond("testType");
+        assertEquals(100, latency);
+    }
+
+    // Add more tests for `getAverageLatencyForLastXMinutes` and other methods if any
+}
+
+import static org.junit.Assert.*;
+import org.junit.Before;
+import org.junit.Test;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+import static org.mockito.Mockito.*;
+
+public class DataHandlerTest {
+
+    @InjectMocks
+    private DataHandler dataHandler;
+
+    @Mock
+    private LatencyTracker latencyTracker;
+
+    @Before
+    public void setUp() {
+        MockitoAnnotations.initMocks(this);
+    }
+
+    @Test
+    public void testApply() {
+        dataHandler.apply(new Object(), "testType");
+        verify(latencyTracker, times(1)).addLatency(anyString(), anyLong());
+    }
+}
+
