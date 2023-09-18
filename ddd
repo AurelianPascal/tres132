@@ -1,0 +1,209 @@
+CREATE PROCEDURE GenerateSelectQuery 
+    @SchemaName NVARCHAR(128) = 'dbo', -- defaulting to 'dbo'
+    @TableName NVARCHAR(128)
+AS
+BEGIN
+    -- Declare variables
+    DECLARE @SQLQuery NVARCHAR(MAX) = 'SELECT '
+    DECLARE @ColumnName NVARCHAR(128)
+    DECLARE @DataType NVARCHAR(50)
+    DECLARE @IsNullable BIT
+
+    -- Declare a cursor to fetch columns of the table
+    DECLARE column_cursor CURSOR FOR 
+    SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = @SchemaName AND TABLE_NAME = @TableName
+
+    OPEN column_cursor
+    FETCH NEXT FROM column_cursor INTO @ColumnName, @DataType, @IsNullable
+
+    WHILE @@FETCH_STATUS = 0
+    BEGIN
+        -- If column is numeric and nullable, use COALESCE to default to 0
+        IF (@DataType IN ('int', 'decimal', 'float', 'money', 'smallint', 'tinyint', 'bigint', 'numeric', 'smallmoney', 'real') AND @IsNullable = 'YES') 
+        BEGIN
+            SET @SQLQuery += 'COALESCE(' + @ColumnName + ', 0) AS ' + @ColumnName
+        END
+        -- For other nullable columns, just use COALESCE
+        ELSE IF (@IsNullable = 'YES')
+        BEGIN
+            SET @SQLQuery += 'COALESCE(' + @ColumnName + ', ''NULL'') AS ' + @ColumnName
+        END
+        -- For non-nullable columns
+        ELSE
+        BEGIN
+            SET @SQLQuery += @ColumnName
+        END
+
+        -- Check for more columns and add a comma if needed
+        FETCH NEXT FROM column_cursor INTO @ColumnName, @DataType, @IsNullable
+        IF @@FETCH_STATUS = 0 
+        BEGIN
+            SET @SQLQuery += ', '
+        END
+    END
+
+    CLOSE column_cursor
+    DEALLOCATE column_cursor
+
+    -- Add the FROM clause with schema and table name
+    SET @SQLQuery += ' FROM [' + @SchemaName + '].[' + @TableName + ']'
+
+    -- Print the generated query
+    PRINT @SQLQuery
+END
+
+
+-- For a table in the default dbo schema:
+EXEC GenerateSelectQuery @TableName = 'YourTableName'
+
+-- For a table in a custom schema:
+EXEC GenerateSelectQuery @SchemaName = 'YourSchemaName', @TableName = 'YourTableName'
+
+
+
+---
+
+<dependency>
+    <groupId>org.flywaydb</groupId>
+    <artifactId>flyway-core</artifactId>
+    <version>7.7.0</version> <!-- Use the latest version -->
+</dependency>
+
+
+
+
+<profiles>
+    <profile>
+        <id>sql-validation</id>
+        <build>
+            <plugins>
+                <plugin>
+                    <groupId>org.flywaydb</groupId>
+                    <artifactId>flyway-maven-plugin</artifactId>
+                    <version>7.7.0</version>
+                    <configuration>
+                        <url>jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;</url>
+                        <user>sa</user>
+                        <password></password>
+                        <locations>filesystem:${project.basedir}/path/to/your/sqlfiles</locations>
+                    </configuration>
+                </plugin>
+            </plugins>
+        </build>
+    </profile>
+    <!-- ... other profiles, including your primary Flyway configuration ... -->
+</profiles>
+
+
+mvn flyway:validate -Psql-validation
+
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.dao.DuplicateKeyException;
+
+@Service
+public class YourService {
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    public void executeStatements(String sqlCommands) {
+        sqlCommands = removeSqlComments(sqlCommands);
+        try {
+            jdbcTemplate.execute(sqlCommands);
+        } catch (DuplicateKeyException e) {
+            handleDuplicateKeyException(sqlCommands);
+        }
+    }
+
+    private void handleDuplicateKeyException(String sqlCommands) {
+        String[] statements = sqlCommands.split(";");
+        for (String statement : statements) {
+            try {
+                jdbcTemplate.update(statement.trim());
+            } catch (DuplicateKeyException e) {
+                System.out.println("Skipping duplicate key statement: " + statement);
+                // You can log it or handle it as per your requirements
+            }
+        }
+    }
+
+    private String removeSqlComments(String sql) {
+        String[] lines = sql.split("\n");
+        StringBuilder cleanedSql = new StringBuilder();
+        for (String line : lines) {
+            if (!line.trim().startsWith("--")) {
+                cleanedSql.append(line).append("\n");
+            }
+        }
+        return cleanedSql.toString();
+    }
+}
+
+
+import org.junit.Before;
+import org.junit.Test;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.jdbc.core.JdbcTemplate;
+
+import static org.mockito.Mockito.*;
+
+public class YourServiceTest {
+
+    @InjectMocks
+    private YourService yourService;
+
+    @Mock
+    private JdbcTemplate jdbcTemplate;
+
+    @Before
+    public void setUp() {
+        MockitoAnnotations.initMocks(this);
+    }
+
+    @Test
+    public void testExecuteStatementsWithoutCommentsOrDuplicates() {
+        String sql = "INSERT INTO table1 VALUES (1, 'data1'); INSERT INTO table2 VALUES (2, 'data2');";
+        yourService.executeStatements(sql);
+        verify(jdbcTemplate, times(1)).execute(sql);
+    }
+
+    @Test
+    public void testExecuteStatementsWithComments() {
+        String sqlWithComments = "-- This is a comment\nINSERT INTO table1 VALUES (1, 'data1');";
+        String expectedSql = "INSERT INTO table1 VALUES (1, 'data1');";
+        yourService.executeStatements(sqlWithComments);
+        verify(jdbcTemplate, times(1)).execute(expectedSql);
+    }
+
+    @Test
+    public void testExecuteStatementsWithDuplicateKey() {
+        String sql = "INSERT INTO table1 VALUES (1, 'data1'); INSERT INTO table2 VALUES (2, 'data2');";
+        String firstStatement = "INSERT INTO table1 VALUES (1, 'data1')";
+        String secondStatement = "INSERT INTO table2 VALUES (2, 'data2')";
+
+        // Simulate a DuplicateKeyException for the first SQL statement
+        doThrow(new DuplicateKeyException("Duplicate key"))
+                .when(jdbcTemplate)
+                .execute(sql);
+        doThrow(new DuplicateKeyException("Duplicate key"))
+                .when(jdbcTemplate)
+                .update(firstStatement);
+
+        yourService.executeStatements(sql);
+
+        // Verify the execute method was called once, and then the first SQL statement caused an exception
+        verify(jdbcTemplate, times(1)).execute(sql);
+        verify(jdbcTemplate, times(1)).update(firstStatement);
+        verify(jdbcTemplate, times(1)).update(secondStatement);
+    }
+}
+
+
