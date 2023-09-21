@@ -1,0 +1,57 @@
+CREATE PROCEDURE sp_GenerateExplicitColumnQuery 
+    @inputQuery NVARCHAR(MAX),
+    @outputQuery NVARCHAR(MAX) OUTPUT
+AS
+BEGIN
+    DECLARE @columns NVARCHAR(MAX) = ''
+    DECLARE @tableName NVARCHAR(255)
+    DECLARE @position INT
+    DECLARE @nextPosition INT
+
+    SET @position = CHARINDEX('FROM', UPPER(@inputQuery)) + 4
+    SET @nextPosition = CHARINDEX('JOIN', UPPER(@inputQuery), @position)
+
+    WHILE @nextPosition > 0
+    BEGIN
+        SET @tableName = LTRIM(RTRIM(SUBSTRING(@inputQuery, @position, @nextPosition - @position)))
+        
+        SELECT @columns = @columns + 
+            CASE 
+                WHEN DATA_TYPE IN ('int', 'decimal', 'float', 'money', 'smallint', 'tinyint', 'bigint') THEN 
+                    'ISNULL([' + COLUMN_NAME + '], 0),'
+                WHEN DATA_TYPE IN ('date', 'datetime', 'datetime2', 'smalldatetime', 'datetimeoffset', 'time') THEN
+                    '[' + COLUMN_NAME + '],'
+                ELSE 
+                    'ISNULL([' + COLUMN_NAME + '], ''''),'
+            END
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_NAME = @tableName
+
+        SET @position = @nextPosition + 4
+        SET @nextPosition = CHARINDEX('JOIN', UPPER(@inputQuery), @position)
+    END
+
+    SET @nextPosition = CHARINDEX('ON', UPPER(@inputQuery), @position)
+    IF @nextPosition > 0
+    BEGIN
+        SET @tableName = LTRIM(RTRIM(SUBSTRING(@inputQuery, @position, @nextPosition - @position)))
+
+        SELECT @columns = @columns + 
+            CASE 
+                WHEN DATA_TYPE IN ('int', 'decimal', 'float', 'money', 'smallint', 'tinyint', 'bigint') THEN 
+                    'ISNULL([' + COLUMN_NAME + '], 0),'
+                WHEN DATA_TYPE IN ('date', 'datetime', 'datetime2', 'smalldatetime', 'datetimeoffset', 'time') THEN
+                    '[' + COLUMN_NAME + '],'
+                ELSE 
+                    'ISNULL([' + COLUMN_NAME + '], ''''),'
+            END
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_NAME = @tableName
+    END
+
+    -- Removing the trailing comma
+    SET @columns = LEFT(@columns, LEN(@columns) - 1)
+
+    -- Creating the output query
+    SET @outputQuery = 'SELECT ' + @columns + ' ' + RIGHT(@inputQuery, LEN(@inputQuery) - CHARINDEX('FROM', UPPER(@inputQuery)) + 1)
+END
