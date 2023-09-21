@@ -1,0 +1,59 @@
+CREATE PROCEDURE sp_GenerateExplicitColumnQuery 
+    @inputQuery NVARCHAR(MAX),
+    @outputQuery NVARCHAR(MAX) OUTPUT
+AS
+BEGIN
+    DECLARE @columns NVARCHAR(MAX) = ''
+    DECLARE @tableName NVARCHAR(255)
+    DECLARE @position INT
+    DECLARE @nextPosition INT
+
+    SET @position = CHARINDEX('FROM', UPPER(@inputQuery)) + 4
+    SET @nextPosition = CHARINDEX('JOIN', UPPER(@inputQuery), @position)
+
+    WHILE @nextPosition > 0
+    BEGIN
+        SET @tableName = LTRIM(RTRIM(SUBSTRING(@inputQuery, @position, @nextPosition - @position)))
+        
+        SELECT @columns = @columns + 
+            CASE 
+                WHEN DATA_TYPE IN ('int', 'decimal', 'float', 'money', 'smallint', 'tinyint', 'bigint') AND IS_NULLABLE = 'YES' THEN 
+                    'ISNULL([' + COLUMN_NAME + '], 0),' + CHAR(10)
+                WHEN DATA_TYPE IN ('date', 'datetime', 'datetime2', 'smalldatetime', 'datetimeoffset', 'time') OR IS_NULLABLE = 'NO' THEN
+                    '[' + COLUMN_NAME + '],' + CHAR(10)
+                ELSE 
+                    'ISNULL([' + COLUMN_NAME + '], ''''),' + CHAR(10)
+            END
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_NAME = @tableName
+
+        SET @position = @nextPosition + 4
+        SET @nextPosition = CHARINDEX('JOIN', UPPER(@inputQuery), @position)
+    END
+
+    SET @nextPosition = CHARINDEX('ON', UPPER(@inputQuery), @position)
+    IF @nextPosition > 0
+    BEGIN
+        SET @tableName = LTRIM(RTRIM(SUBSTRING(@inputQuery, @position, @nextPosition - @position)))
+
+        SELECT @columns = @columns + 
+            CASE 
+                WHEN DATA_TYPE IN ('int', 'decimal', 'float', 'money', 'smallint', 'tinyint', 'bigint') AND IS_NULLABLE = 'YES' THEN 
+                    'ISNULL([' + COLUMN_NAME + '], 0),' + CHAR(10)
+                WHEN DATA_TYPE IN ('date', 'datetime', 'datetime2', 'smalldatetime', 'datetimeoffset', 'time') OR IS_NULLABLE = 'NO' THEN
+                    '[' + COLUMN_NAME + '],' + CHAR(10)
+                ELSE 
+                    'ISNULL([' + COLUMN_NAME + '], ''''),' + CHAR(10)
+            END
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_NAME = @tableName
+    END
+
+    IF LEN(@columns) > 0
+        SET @columns = LEFT(@columns, LEN(@columns) - 1) -- Removing the trailing comma and newline
+    ELSE
+        PRINT 'No columns found.' -- Debug message
+
+    SET @outputQuery = 'SELECT' + CHAR(10) + @columns + CHAR(10) + RIGHT(@inputQuery, LEN(@inputQuery) - CHARINDEX('FROM', UPPER(@inputQuery)) + 1)
+    PRINT @outputQuery -- Debug message
+END
