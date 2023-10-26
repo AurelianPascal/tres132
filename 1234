@@ -1,3 +1,5 @@
+=IF(OR(AND(A1="DateTime", B1="datetime2"), AND(A1="int", B1="int"), AND(A1="boolean", B1="int"), AND(A1="String", B1="varchar"), AND(A1="double", B1="decimal")), "Compatible", "Not Compatible")
+
 DELETE t1
 FROM YourTable t1
 INNER JOIN YourTable t2 ON t1.userid = t2.userid
