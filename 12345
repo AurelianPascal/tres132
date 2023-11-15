@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    
+    <groupId>com.example</groupId>
+    <artifactId>csv-to-yaml-converter</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    
+    <properties>
+        <java.version>11</java.version>
+        <spring-boot.version>2.5.4</spring-boot.version>
+    </properties>
+    
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.dataformat</groupId>
+            <artifactId>jackson-dataformat-yaml</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.opencsv</groupId>
+            <artifactId>opencsv</artifactId>
+        </dependency>
+    </dependencies>
+    
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>
+
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.opencsv.CSVReader;
+import org.springframework.stereotype.Service;
+
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+@Service
+public class CsvToYamlConverter {
+
+   public void convertCsvToYaml(String csvFilePath, String columnNameFilePath, String outputYamlFileName) throws IOException {
+       CSVReader tableReader = new CSVReader(new FileReader(csvFilePath));
+       CSVReader columnNameReader = new CSVReader(new FileReader(columnNameFilePath));
+       List<Map<String, Object>> tableMappings = new ArrayList<>();
+       List<String> columnNames = columnNameReader.readNext(); // Read the first line of the columnName CSV as column names.
+
+       Map<String, Map<String, Object>> tableMap = new LinkedHashMap<>();
+
+       String[] nextLine;
+       while ((nextLine = tableReader.readNext()) != null) {
+           if (nextLine.length == 4) {
+               String tableName = nextLine[2];
+               if (!tableMap.containsKey(tableName)) {
+                   // Initialize a new table entry if it doesn't exist.
+                   Map<String, Object> tableEntry = new LinkedHashMap<>();
+                   tableEntry.put("Table", tableName); // Rename "TableName" to "Table"
+                   tableEntry.put("columns", new ArrayList<>());
+                   tableMap.put(tableName, tableEntry);
+               }
+
+               Map<String, Object> columnEntry = new LinkedHashMap<>();
+               String maxLength = nextLine[3];
+               if (maxLength != null && !maxLength.isEmpty()) {
+                   columnEntry.put("type", nextLine[0] + "(" + maxLength + ")"); // Combine type and maxLength
+               } else {
+                   columnEntry.put("type", nextLine[0]); // Use type only
+               }
+               columnEntry.put("name", nextLine[1].toLowerCase()); // Convert to lowercase and rename to "name"
+               // Add the column entry to the corresponding table.
+               tableMap.get(tableName).get("columns", List.class).add(columnEntry);
+           }
+       }
+       tableReader.close();
+       columnNameReader.close();
+
+       // Write the table mappings to a YAML file with the custom name.
+       List<Map<String, Object>> tableList = new ArrayList<>(tableMap.values());
+       ObjectMapper objectMapper = new ObjectMapper(new YAMLFactory());
+       objectMapper.writeValue(new FileWriter(outputYamlFileName), tableList);
+   }
+}
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.io.IOException;
+
+@RestController
+public class CsvToYamlController {
+
+   @Autowired
+   private CsvToYamlConverter converter;
+
+   @GetMapping("/convert")
+   public String convertCsvToYaml(
+           @RequestParam String csvFilePath,
+           @RequestParam String columnNameFilePath,
+           @RequestParam String outputYamlFileName) throws IOException {
+       converter.convertCsvToYaml(csvFilePath, columnNameFilePath, outputYamlFileName);
+       return "Conversion completed. YAML file created: " + outputYamlFileName;
+   }
+}
+
+http://localhost:8080/convert?csvFilePath=/path/to/tableMappings.csv&columnNameFilePath=/path/to/columnNames.csv&outputYamlFileName=/path/to/output/output.yaml
+
