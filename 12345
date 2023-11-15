@@ -122,3 +122,9 @@ public class CsvToYamlController {
 
 http://localhost:8080/convert?csvFilePath=/path/to/tableMappings.csv&columnNameFilePath=/path/to/columnNames.csv&outputYamlFileName=/path/to/output/output.yaml
 
+JavaType,JSONKey,MapToTable,MaxLength
+String,issue,ISSUE_TABLE,50
+Integer,year,ISSUE_TABLE,5
+Boolean,isActive,STATUS_TABLE,
+String,description,STATUS_TABLE,100
+
