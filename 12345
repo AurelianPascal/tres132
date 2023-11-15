@@ -316,5 +316,62 @@ public class CsvToYamlConverterServiceTest {
     // Add more test methods for different scenarios, such as error handling, etc.
 }
 
+///////////
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.opencsv.CSVReader;
+import org.springframework.stereotype.Service;
+
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.*;
+import java.util.stream.Collectors;
+
+@Service
+public class CsvToYamlConverter {
+
+    public void convertCsvToYaml(String csvFilePath, String columnNameFilePath, String outputYamlFileName) throws IOException {
+        CSVReader tableReader = new CSVReader(new FileReader(csvFilePath));
+        CSVReader columnNameReader = new CSVReader(new FileReader(columnNameFilePath));
+
+        List<String> columnNames = columnNameReader.readNext(); // Read the first line of the columnName CSV as column names.
+
+        Map<String, List<Map<String, Object>>> tableMap = new LinkedHashMap<>();
+
+        tableReader.readAll().forEach(nextLine -> {
+            if (nextLine.length == 4) {
+                String tableName = nextLine[2];
+                tableMap.computeIfAbsent(tableName, k -> new ArrayList<>());
+
+                Map<String, Object> columnEntry = new LinkedHashMap<>();
+                String maxLength = nextLine[3];
+                String type = maxLength != null && !maxLength.isEmpty() ? nextLine[0] + "(" + maxLength + ")" : nextLine[0];
+                columnEntry.put("type", type);
+                columnEntry.put("name", nextLine[1].toLowerCase());
+
+                tableMap.get(tableName).add(columnEntry);
+            }
+        });
+
+        tableReader.close();
+        columnNameReader.close();
+
+        List<Map<String, Object>> tableList = tableMap.entrySet().stream()
+                .map(entry -> {
+                    Map<String, Object> tableEntry = new LinkedHashMap<>();
+                    tableEntry.put("Table", entry.getKey());
+                    tableEntry.put("columns", entry.getValue());
+                    return tableEntry;
+                })
+                .collect(Collectors.toList());
+
+        ObjectMapper objectMapper = new ObjectMapper(new YAMLFactory());
+        objectMapper.writeValue(new FileWriter(outputYamlFileName), tableList);
+    }
+}
+
+
 
 
