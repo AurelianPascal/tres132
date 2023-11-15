@@ -128,3 +128,193 @@ Integer,year,ISSUE_TABLE,5
 Boolean,isActive,STATUS_TABLE,
 String,description,STATUS_TABLE,100
 
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.opencsv.CSVReader;
+import org.springframework.stereotype.Service;
+
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+@Service
+public class CsvToYamlConverter {
+
+   public void convertCsvToYaml(String csvFilePath, String columnNameFilePath, String outputYamlFileName) throws IOException {
+       CSVReader tableReader = new CSVReader(new FileReader(csvFilePath));
+       CSVReader columnNameReader = new CSVReader(new FileReader(columnNameFilePath));
+       List<Map<String, Object>> tableMappings = new ArrayList<>();
+       List<String> columnNames = columnNameReader.readNext(); // Read the first line of the columnName CSV as column names.
+
+       Map<String, Map<String, Object>> tableMap = new LinkedHashMap<>();
+
+       String[] nextLine;
+       while ((nextLine = tableReader.readNext()) != null) {
+           if (nextLine.length == 4) {
+               String tableName = nextLine[2];
+               if (!tableMap.containsKey(tableName)) {
+                   // Initialize a new table entry if it doesn't exist.
+                   Map<String, Object> tableEntry = new LinkedHashMap<>();
+                   tableEntry.put("Table", tableName); // Rename "TableName" to "Table"
+                   tableEntry.put("columns", new ArrayList<>());
+                   tableMap.put(tableName, tableEntry);
+               }
+
+               Map<String, Object> columnEntry = new LinkedHashMap<>();
+               String maxLength = nextLine[3];
+               if (maxLength != null && !maxLength.isEmpty()) {
+                   columnEntry.put("type", nextLine[0] + "(" + maxLength + ")"); // Combine type and maxLength
+               } else {
+                   columnEntry.put("type", nextLine[0]); // Use type only
+               }
+               columnEntry.put("name", nextLine[1].toLowerCase()); // Convert to lowercase and rename to "name"
+               // Add the column entry to the corresponding table.
+               tableMap.get(tableName).get("columns", List.class).add(columnEntry);
+           }
+       }
+       tableReader.close();
+       columnNameReader.close();
+
+       // Write the table mappings to a YAML file with the custom name.
+       List<Map<String, Object>> tableList = new ArrayList<>(tableMap.values());
+       ObjectMapper objectMapper = new ObjectMapper(new YAMLFactory());
+       objectMapper.writeValue(new FileWriter(outputYamlFileName), tableList);
+   }
+}
+///////////
+import org.junit.jupiter.api.Test;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+
+import java.io.IOException;
+
+import static org.mockito.Mockito.*;
+
+public class CsvToYamlControllerTest {
+
+    @InjectMocks
+    private CsvToYamlController controller;
+
+    @Mock
+    private CsvToYamlConverter converter;
+
+    public CsvToYamlControllerTest() {
+        MockitoAnnotations.initMocks(this);
+    }
+
+    @Test
+    public void testConvertCsvToYaml_Success() throws IOException {
+        // Arrange: Mock the service behavior
+        String csvFilePath = "test.csv";
+        String columnNameFilePath = "columns.csv";
+        String outputYamlFileName = "output.yaml";
+
+        // Set up any expected behavior using Mockito.when() for the converter.
+
+        // Act: Call the controller endpoint
+        ResponseEntity<String> response = controller.convertCsvToYaml(csvFilePath, columnNameFilePath, outputYamlFileName);
+
+        // Assert: Verify the response status and any expected behavior
+        assertAll(() -> {
+            assertEquals(HttpStatus.OK, response.getStatusCode());
+            assertEquals("Conversion completed. YAML file created: output.yaml", response.getBody());
+
+            // Verify that the converter's method was called with the correct arguments.
+            verify(converter, times(1)).convertCsvToYaml(csvFilePath, columnNameFilePath, outputYamlFileName);
+        });
+    }
+
+    // Add more test methods for different scenarios, such as error handling, etc.
+}
+///////////////////
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+import org.mockito.junit.jupiter.MockitoExtension;
+import uk.org.webcompere.mockfile.junit.MockFileExtension;
+import uk.org.webcompere.mockfile.junit.MockFileSystem;
+import uk.org.webcompere.mockfile.junit.RegisteredPath;
+import uk.org.webcompere.mockfile.mockito.PredicatedAnswer;
+
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.nio.file.FileSystem;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class)
+@ExtendWith(MockFileExtension.class)
+public class CsvToYamlConverterServiceTest {
+
+    @InjectMocks
+    private CsvToYamlConverter converter;
+
+    @Mock
+    private ObjectMapper objectMapper;
+
+    @RegisteredPath(fileSystem = "testFileSystem")
+    private Path csvFilePath;
+
+    @RegisteredPath(fileSystem = "testFileSystem")
+    private Path columnNameFilePath;
+
+    @RegisteredPath(fileSystem = "testFileSystem")
+    private Path outputYamlFileName;
+
+    @BeforeEach
+    public void setUp(MockFileSystem fileSystem) throws IOException {
+        MockitoAnnotations.initMocks(this);
+
+        // Create CSV content for testing
+        try (PrintWriter writer = new PrintWriter(csvFilePath.toFile())) {
+            writer.println("JavaType,JSONKey,MapToTable,MaxLength");
+            writer.println("String,issue,ISSUE_TABLE,50");
+            writer.println("Integer,year,ISSUE_TABLE,5");
+            writer.println("Boolean,isActive,STATUS_TABLE,");
+            writer.println("String,description,STATUS_TABLE,100");
+        }
+
+        // Create an empty columnNames file
+        fileSystem.getPath("columns.csv").toFile().createNewFile();
+    }
+
+    @Test
+    public void testConvertCsvToYaml_Success() throws IOException {
+        // Arrange: Set up expectations for ObjectMapper
+        when(objectMapper.writeValueAsString(anyList())).thenReturn("YAML content");
+
+        // Act: Call the service method
+        converter.convertCsvToYaml(
+            csvFilePath.toString(),
+            columnNameFilePath.toString(),
+            outputYamlFileName.toString()
+        );
+
+        // Assert: Verify the content of the YAML file
+        List<String> yamlLines = Files.readAllLines(outputYamlFileName);
+        assertNotNull(yamlLines);
+        assertFalse(yamlLines.isEmpty());
+
+        // Verify that ObjectMapper.writeValueAsString was called with the correct argument
+        verify(objectMapper, times(1)).writeValueAsString(anyList());
+    }
+
+    // Add more test methods for different scenarios, such as error handling, etc.
+}
+
+
+
