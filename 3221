@@ -381,5 +381,32 @@ public class YamlToCsvController {
             e.printStackTrace();
         }
     }
+}///
+public class MappingTable {
+    private String mappingTable;
+    private String columnNames;
+    private List<String> rows;
+
+    // Getters and Setters
 }
 
+public class Section {
+    private String sectionName;
+    private String columnNames;
+    private List<String> rows;
+
+    // Getters and Setters
+}
+
+public class LinguaMapSection {
+    private List<Section> section;
+
+    // Getters and Setters
+}
+
+public class YamlStructure {
+    private List<MappingTable> mappingTables;
+    private LinguaMapSection linguaMapSection;
+
+    // Getters and Setters
+}
