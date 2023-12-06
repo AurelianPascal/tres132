@@ -282,3 +282,56 @@ public class CsvToYamlController {
         return yaml.dump(yamlMap);
     }
 }
+
+/////////////
+
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.Constructor;
+import com.opencsv.bean.StatefulBeanToCsv;
+import com.opencsv.bean.StatefulBeanToCsvBuilder;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.Writer;
+import java.util.Map;
+
+@RestController
+public class YamlToCsvController {
+
+    @GetMapping("/convertYamlToCsv")
+    public String convertYamlToCsv() {
+        try {
+            // Step 1: Read the YAML file
+            Yaml yaml = new Yaml(new Constructor(Map.class));
+            Map<String, Object> yamlData = yaml.load(new FileReader("path/to/your/yamlFile.yaml"));
+
+            // Extract data for each CSV
+            List<TableConfig> tableConfigs = (List<TableConfig>) yamlData.get("CFG_TABLE_CONFIG");
+            List<MessageMap> messageMaps = (List<MessageMap>) yamlData.get("CFG_MESSAGE_MAP");
+            LinguaMap linguaMap = (LinguaMap) yamlData.get("CFG_LINGUA_MAP");
+
+            // Step 2: Write data to CSV files
+            writeCsv("path/to/tableConfig.csv", tableConfigs);
+            writeCsv("path/to/messageMap.csv", messageMaps);
+            writeCsv("path/to/variables.csv", linguaMap.getVariables());
+            writeCsv("path/to/mapAsMajor.csv", linguaMap.getMapAsMajors());
+            writeCsv("path/to/manualyMapped.csv", linguaMap.getManualyMappeds());
+
+            return "YAML to CSV conversion successful!";
+        } catch (Exception e) {
+            e.printStackTrace();
+            return "Error during conversion: " + e.getMessage();
+        }
+    }
+
+    private <T> void writeCsv(String filePath, List<T> data) {
+        try (Writer writer = new FileWriter(filePath)) {
+            StatefulBeanToCsv<T> beanToCsv = new StatefulBeanToCsvBuilder<T>(writer).build();
+            beanToCsv.write(data);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+}
+
