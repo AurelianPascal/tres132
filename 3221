@@ -1,0 +1,284 @@
+Define Java Classes for CSV Structures
+
+1. TableConfig Class for CFG_TABLE_CONFIG
+java
+Copy code
+public class TableConfig {
+    private String linguamajor;
+    private String tablename;
+    private String schemaowner;
+    private String hashhist;
+    private String triggertable;
+    private int lockseq;
+    private String tabletype;
+
+    // Getters and setters
+}
+2. MessageMap Class for CFG_MESSAGE_MAP
+java
+Copy code
+public class MessageMap {
+    private String messagetype;
+    private String assetclass;
+    private String linguamajor;
+    private String updatemode;
+
+    // Getters and setters
+}
+3. LinguaMap Class for CFG_LINGUA_MAP
+This class will contain nested classes for each section within the CFG_LINGUA_MAP.
+
+java
+Copy code
+public class LinguaMap {
+    private List<Variable> variables;
+    private List<MapAsMajor> mapAsMajors;
+    private List<ManualyMapped> manualyMappeds;
+
+    // Nested classes for Variable, MapAsMajor, ManualyMapped
+    // Getters and setters
+}
+
+public class Variable {
+    private String linguamajor;
+    private String linguaminor;
+    private String linguafield;
+    private String databasetype;
+    private String variable;
+
+    // Getters and setters
+}
+
+public class MapAsMajor {
+    private String linguamajor;
+    private String linguaminor;
+    private String jsonnamespace;
+
+    // Getters and setters
+}
+
+public class ManualyMapped {
+    private String hierarchytype;
+    private String tabletype;
+    private String linguamajor;
+    private String linguaminor;
+    private String linguafield;
+    private String tablename;
+    private String tablecolumn;
+    private String databasetype;
+    private String variable;
+
+    // Getters and setters
+}
+
+import com.opencsv.bean.CsvToBeanBuilder;
+import org.springframework.stereotype.Service;
+import java.io.FileReader;
+import java.util.List;
+
+@Service
+public class CsvService {
+
+    public List<TableConfig> readTableConfigCsv(String filePath) {
+        try (FileReader reader = new FileReader(filePath)) {
+            return new CsvToBeanBuilder<TableConfig>(reader)
+                    .withType(TableConfig.class)
+                    .build()
+                    .parse();
+        } catch (Exception e) {
+            // Handle exceptions
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    public List<MessageMap> readMessageMapCsv(String filePath) {
+        try (FileReader reader = new FileReader(filePath)) {
+            return new CsvToBeanBuilder<MessageMap>(reader)
+                    .withType(MessageMap.class)
+                    .build()
+                    .parse();
+        } catch (Exception e) {
+            // Handle exceptions
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    public LinguaMap readLinguaMapCsv(String variablesFilePath, String mapAsMajorFilePath, String manualyMappedFilePath) {
+        LinguaMap linguaMap = new LinguaMap();
+        try {
+            linguaMap.setVariables(readVariablesCsv(variablesFilePath));
+            linguaMap.setMapAsMajors(readMapAsMajorCsv(mapAsMajorFilePath));
+            linguaMap.setManualyMappeds(readManualyMappedCsv(manualyMappedFilePath));
+        } catch (Exception e) {
+            // Handle exceptions
+            e.printStackTrace();
+        }
+        return linguaMap;
+    }
+
+    private List<Variable> readVariablesCsv(String filePath) {
+        try (FileReader reader = new FileReader(filePath)) {
+            return new CsvToBeanBuilder<Variable>(reader)
+                    .withType(Variable.class)
+                    .build()
+                    .parse();
+        } catch (Exception e) {
+            // Handle exceptions
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private List<MapAsMajor> readMapAsMajorCsv(String filePath) {
+        try (FileReader reader = new FileReader(filePath)) {
+            return new CsvToBeanBuilder<MapAsMajor>(reader)
+                    .withType(MapAsMajor.class)
+                    .build()
+                    .parse();
+        } catch (Exception e) {
+            // Handle exceptions
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private List<ManualyMapped> readManualyMappedCsv(String filePath) {
+        try (FileReader reader = new FileReader(filePath)) {
+            return new CsvToBeanBuilder<ManualyMapped>(reader)
+                    .withType(ManualyMapped.class)
+                    .build()
+                    .parse();
+        } catch (Exception e) {
+            // Handle exceptions
+            e.printStackTrace();
+            return null;
+        }
+    }
+}
+
+import com.opencsv.bean.CsvToBeanBuilder;
+import org.springframework.stereotype.Service;
+import java.io.FileReader;
+import java.util.List;
+
+@Service
+public class CsvService {
+
+    public List<TableConfig> readTableConfigCsv(String filePath) {
+        try (FileReader reader = new FileReader(filePath)) {
+            return new CsvToBeanBuilder<TableConfig>(reader)
+                    .withType(TableConfig.class)
+                    .build()
+                    .parse();
+        } catch (Exception e) {
+            // Handle exceptions
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    public List<MessageMap> readMessageMapCsv(String filePath) {
+        try (FileReader reader = new FileReader(filePath)) {
+            return new CsvToBeanBuilder<MessageMap>(reader)
+                    .withType(MessageMap.class)
+                    .build()
+                    .parse();
+        } catch (Exception e) {
+            // Handle exceptions
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    public LinguaMap readLinguaMapCsv(String variablesFilePath, String mapAsMajorFilePath, String manualyMappedFilePath) {
+        LinguaMap linguaMap = new LinguaMap();
+        try {
+            linguaMap.setVariables(readVariablesCsv(variablesFilePath));
+            linguaMap.setMapAsMajors(readMapAsMajorCsv(mapAsMajorFilePath));
+            linguaMap.setManualyMappeds(readManualyMappedCsv(manualyMappedFilePath));
+        } catch (Exception e) {
+            // Handle exceptions
+            e.printStackTrace();
+        }
+        return linguaMap;
+    }
+
+    private List<Variable> readVariablesCsv(String filePath) {
+        try (FileReader reader = new FileReader(filePath)) {
+            return new CsvToBeanBuilder<Variable>(reader)
+                    .withType(Variable.class)
+                    .build()
+                    .parse();
+        } catch (Exception e) {
+            // Handle exceptions
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private List<MapAsMajor> readMapAsMajorCsv(String filePath) {
+        try (FileReader reader = new FileReader(filePath)) {
+            return new CsvToBeanBuilder<MapAsMajor>(reader)
+                    .withType(MapAsMajor.class)
+                    .build()
+                    .parse();
+        } catch (Exception e) {
+            // Handle exceptions
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private List<ManualyMapped> readManualyMappedCsv(String filePath) {
+        try (FileReader reader = new FileReader(filePath)) {
+            return new CsvToBeanBuilder<ManualyMapped>(reader)
+                    .withType(ManualyMapped.class)
+                    .build()
+                    .parse();
+        } catch (Exception e) {
+            // Handle exceptions
+            e.printStackTrace();
+            return null;
+        }
+    }
+}
+
+2. Read CSV Files
+You can use OpenCSV or a similar library to read the CSV files and map them to the above Java objects.
+
+3. Convert Java Objects to YAML
+Using SnakeYAML, convert the Java objects to YAML. Here's a simple way to do it:
+
+java
+Copy code
+public String toYaml(Object data) {
+    Yaml yaml = new Yaml();
+    return yaml.dumpAsMap(data);
+}
+4. Spring Boot Controller to Handle the Conversion
+java
+Copy code
+@RestController
+public class CsvToYamlController {
+
+    @Autowired
+    private CsvService csvService;  // Service to read CSV and convert to Java Objects
+
+    @GetMapping("/convert")
+    public String convertCsvToYaml() {
+        List<TableConfig> tableConfigs = csvService.readTableConfigCsv();
+        List<MessageMap> messageMaps = csvService.readMessageMapCsv();
+        LinguaMap linguaMap = csvService.readLinguaMapCsv();
+
+        // Now, convert these objects to YAML
+        Yaml yaml = new Yaml();
+        Map<String, Object> yamlMap = new LinkedHashMap<>();
+        yamlMap.put("CFG_TABLE_CONFIG", tableConfigs);
+        yamlMap.put("CFG_MESSAGE_MAP", messageMaps);
+        yamlMap.put("CFG_LINGUA_MAP", linguaMap);
+
+        return yaml.dump(yamlMap);
+    }
+}
