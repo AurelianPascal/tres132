@@ -334,4 +334,52 @@ public class YamlToCsvController {
         }
     }
 }
+.////
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.Constructor;
+import com.opencsv.CSVWriter;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.util.List;
+
+@RestController
+public class YamlToCsvController {
+
+    @GetMapping("/convertYamlToCsv")
+    public String convertYamlToCsv() {
+        try {
+            // Step 1: Read the YAML file
+            Yaml yaml = new Yaml(new Constructor(YamlStructure.class));
+            YamlStructure yamlData = yaml.load(new FileReader("path/to/your/yamlFile.yaml"));
+
+            // Process and write each mapping table to a CSV file
+            for (MappingTable mappingTable : yamlData.getMappingTables()) {
+                writeCsv(mappingTable.getMappingTable() + ".csv", mappingTable.getColumnNames(), mappingTable.getRows());
+            }
+
+            // Process and write each section of LinguaMap to a CSV file
+            for (Section section : yamlData.getLinguaMapSection().getSection()) {
+                writeCsv(section.getSectionName() + ".csv", section.getColumnNames(), section.getRows());
+            }
+
+            return "YAML to CSV conversion successful!";
+        } catch (Exception e) {
+            e.printStackTrace();
+            return "Error during conversion: " + e.getMessage();
+        }
+    }
+
+    private void writeCsv(String fileName, String columnNames, List<String> rows) {
+        try (CSVWriter writer = new CSVWriter(new FileWriter("path/to/output/" + fileName))) {
+            writer.writeNext(columnNames.split(","));
+            for (String row : rows) {
+                writer.writeNext(row.split(","));
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+}
 
