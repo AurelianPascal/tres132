@@ -1,0 +1,286 @@
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.StringJoiner;
+
+@RestController
+public class SqlController {
+
+    private final DatabaseMetaDataService metaDataService;
+
+    public SqlController(DatabaseMetaDataService metaDataService) {
+        this.metaDataService = metaDataService;
+    }
+
+    @PostMapping("/process-sql")
+    public String processSql(@RequestBody String sql) {
+        String[] parts = sql.split(" ");
+        List<String> tableNames = new ArrayList<>();
+        StringJoiner selectClause = new StringJoiner(", ", "SELECT ", " ");
+
+        // Extract table names
+        for (int i = 0; i < parts.length; i++) {
+            if (parts[i].equalsIgnoreCase("from") || parts[i].equalsIgnoreCase("join")) {
+                if (i + 1 < parts.length) {
+                    tableNames.add(parts[i + 1]);
+                }
+            }
+        }
+
+        // Fetch column names for each table and add them to the select clause
+        for (String tableName : tableNames) {
+            List<String> columnNames = metaDataService.getColumnNames(tableName);
+            columnNames.forEach(column -> selectClause.add(tableName + "." + column));
+        }
+
+        // Replace '*' with the new SELECT clause
+        String newSql = sql.replaceFirst("\\*", selectClause.toString());
+
+        return newSql;
+    }
+}
+
+
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.StringJoiner;
+
+@RestController
+public class SqlController {
+
+    private final DatabaseMetaDataService metaDataService;
+
+    public SqlController(DatabaseMetaDataService metaDataService) {
+        this.metaDataService = metaDataService;
+    }
+
+    @PostMapping("/process-sql")
+    public String processSql(@RequestBody String sql) {
+        String[] parts = sql.split(" ");
+        List<String> tableNames = new ArrayList<>();
+        StringJoiner selectClause = new StringJoiner(", ", "SELECT ", " ");
+
+        // Extract table names
+        for (int i = 0; i < parts.length; i++) {
+            if (parts[i].equalsIgnoreCase("from") || parts[i].equalsIgnoreCase("join")) {
+                if (i + 1 < parts.length) {
+                    tableNames.add(parts[i + 1]);
+                }
+            }
+        }
+
+        // Fetch column names for each table and add them to the select clause
+        for (String tableName : tableNames) {
+            List<String> columnNames = metaDataService.getColumnNames(tableName);
+            columnNames.forEach(column -> selectClause.add(tableName + "." + column));
+        }
+
+        // Replace '*' with the new SELECT clause
+        String newSql = sql.replaceFirst("\\*", selectClause.toString());
+
+        return newSql;
+    }
+}
+
+
+///////////
+  @PostMapping("/create-view")
+    public String createView(@RequestBody String selectSql, @RequestParam String viewName) throws JSQLParserException {
+        // Validate that the input is a SELECT statement
+        Statement statement = CCJSqlParserUtil.parse(selectSql);
+        if (!(statement instanceof Select)) {
+            throw new IllegalArgumentException("The provided SQL must be a SELECT statement");
+        }
+
+        // Construct and return the CREATE VIEW statement
+        return "CREATE VIEW " + viewName + " AS " + selectSql;
+    }
+	
+	///////
+	
+	    @PostMapping("/create-view")
+    public String createView(@RequestBody String selectSql, @RequestParam String viewName) {
+        // Basic validation to check if it's a SELECT statement
+        if (!selectSql.trim().toLowerCase().startsWith("select")) {
+            throw new IllegalArgumentException("The provided SQL must be a SELECT statement");
+        }
+
+        // Construct the CREATE VIEW statement
+        String createViewSql = "CREATE VIEW " + viewName + " AS " + selectSql;
+
+        // Write to a file in src/main/resources (or another directory)
+        try {
+            String filePath = Paths.get("src", "main", "resources", viewName + ".sql").toString();
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(filePath))) {
+                writer.write(createViewSql);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Error writing to file", e);
+        }
+
+        return "SQL View written to file: " + viewName + ".sql";
+    }
+	
+/////////////
+	
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+import javax.sql.DataSource;
+import java.util.HashMap;
+import java.util.Map;
+
+@Service
+public class DatabaseMetaDataService {
+
+    private final JdbcTemplate jdbcTemplate;
+
+    public DatabaseMetaDataService(DataSource dataSource) {
+        this.jdbcTemplate = new JdbcTemplate(dataSource);
+    }
+
+    // ... (other methods)
+
+    public Map<String, String> getColumnMappings() {
+        String sql = "SELECT original_name, mapped_name FROM column_mappings";
+        return jdbcTemplate.query(sql, rs -> {
+            Map<String, String> mapping = new HashMap<>();
+            while (rs.next()) {
+                mapping.put(rs.getString("original_name"), rs.getString("mapped_name"));
+            }
+            return mapping;
+        });
+    }
+}
+
+/////////////
+
+import org.springframework.web.bind.annotation.*;
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.file.Paths;
+import java.util.Map;
+
+@RestController
+public class SqlViewController {
+
+    private final DatabaseMetaDataService metaDataService;
+
+    public SqlViewController(DatabaseMetaDataService metaDataService) {
+        this.metaDataService = metaDataService;
+    }
+
+    @PostMapping("/create-view")
+    public String createView(@RequestBody String selectSql, @RequestParam String viewName) {
+        if (!selectSql.trim().toLowerCase().startsWith("select")) {
+            throw new IllegalArgumentException("The provided SQL must be a SELECT statement");
+        }
+
+        // Fetch column mappings
+        Map<String, String> columnMappings = metaDataService.getColumnMappings();
+
+        // Replace original column names with mapped names
+        for (Map.Entry<String, String> entry : columnMappings.entrySet()) {
+            selectSql = selectSql.replaceAll("\\b" + entry.getKey() + "\\b", entry.getValue());
+        }
+
+        String createViewSql = "CREATE VIEW " + viewName + " AS " + selectSql;
+
+        // Write to a file
+        try {
+            String filePath = Paths.get("src", "main", "resources", viewName + ".sql").toString();
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(filePath))) {
+                writer.write(createViewSql);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Error writing to file", e);
+        }
+
+        return "SQL View written to file: " + viewName + ".sql";
+    }
+}
+
+/////////////
+
+import org.springframework.web.bind.annotation.*;
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.file.Paths;
+import java.util.Map;
+
+@RestController
+public class SqlViewController {
+
+    private final DatabaseMetaDataService metaDataService;
+
+    public SqlViewController(DatabaseMetaDataService metaDataService) {
+        this.metaDataService = metaDataService;
+    }
+
+    @PostMapping("/create-view")
+    public String createView(@RequestBody String selectSql, @RequestParam String viewName) {
+        if (!selectSql.trim().toLowerCase().startsWith("select")) {
+            throw new IllegalArgumentException("The provided SQL must be a SELECT statement");
+        }
+
+        // Fetch column mappings
+        Map<String, String> columnMappings = metaDataService.getColumnMappings();
+
+        // Replace original column names with mapped names
+        for (Map.Entry<String, String> entry : columnMappings.entrySet()) {
+            selectSql = selectSql.replaceAll("\\b" + entry.getKey() + "\\b", entry.getValue());
+        }
+
+        String createViewSql = "CREATE VIEW " + viewName + " AS " + selectSql;
+
+        // Write to a file
+        try {
+            String filePath = Paths.get("src", "main", "resources", viewName + ".sql").toString();
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(filePath))) {
+                writer.write(createViewSql);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Error writing to file", e);
+        }
+
+        return "SQL View written to file: " + viewName + ".sql";
+    }
+}
+
+/////////////
+
+
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+import javax.sql.DataSource;
+import java.util.HashMap;
+import java.util.Map;
+
+@Service
+public class DatabaseMetaDataService {
+
+    private final JdbcTemplate jdbcTemplate;
+
+    public DatabaseMetaDataService(DataSource dataSource) {
+        this.jdbcTemplate = new JdbcTemplate(dataSource);
+    }
+
+    // ... (other methods)
+
+    public Map<String, String> getColumnMappings() {
+        String sql = "SELECT original_name, mapped_name FROM column_mappings";
+        return jdbcTemplate.query(sql, rs -> {
+            Map<String, String> mapping = new HashMap<>();
+            while (rs.next()) {
+                mapping.put(rs.getString("original_name"), rs.getString("mapped_name"));
+            }
+            return mapping;
+        });
+    }
+}
