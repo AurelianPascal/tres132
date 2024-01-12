@@ -1,0 +1,76 @@
+CREATE VIEW dbo.LatestVersionWithIndex
+WITH SCHEMABINDING
+AS
+    SELECT id, 
+           MAX(version) AS LatestVersion,
+           -- Include other columns you need
+           COUNT_BIG(*) AS Count
+    FROM dbo.YourTableName -- Replace with your actual table name
+    GROUP BY id;
+
+CREATE UNIQUE CLUSTERED INDEX IDX_LatestVersion ON dbo.LatestVersionWithIndex (id);
+
+-----------
+
+from pyspark.sql import SparkSession
+
+# Initialize Spark session
+spark = SparkSession.builder.appName("DeltaLakeToSQLServerInsertMissingCheck").getOrCreate()
+
+# Load data from the Delta Lake table
+delta_table = "your_delta_table_path"  # Replace with your Delta Lake table path
+df = spark.read.format("delta").load(delta_table)
+
+# Define SQL Server connection properties
+server_name = "jdbc:sqlserver://your_server.database.windows.net"
+database_name = "your_database"
+url = server_name + ";" + "databaseName=" + database_name
+table_name = "your_target_table"  # Replace with your target table in SQL Server
+user = "your_username"
+password = "your_password"  # Ensure this is securely handled
+
+# Read the existing data from SQL Server
+df_existing = spark.read \
+    .format("jdbc") \
+    .option("url", url) \
+    .option("dbtable", table_name) \
+    .option("user", user) \
+    .option("password", password) \
+    .load()
+
+# Define the unique identifier columns
+unique_id_cols = ["id", "version"]  # Replace with your unique identifier columns
+
+# Find rows in Delta Lake that are not present in SQL Server
+df_missing = df.join(df_existing, [df[col] == df_existing[col] for col in unique_id_cols], "left_anti")
+
+# Write the missing rows to SQL Server
+df_missing.write \
+    .format("jdbc") \
+    .option("url", url) \
+    .option("dbtable", table_name) \
+    .option("user", user) \
+    .option("password", password) \
+    .mode("append") \
+    .save()
+
+# Re-read the existing data from SQL Server to refresh the dataset
+df_existing_updated = spark.read \
+    .format("jdbc") \
+    .option("url", url) \
+    .option("dbtable", table_name) \
+    .option("user", user) \
+    .option("password", password) \
+    .load()
+
+# Check if any missing rows remain
+df_missing_after_insert = df.join(df_existing_updated, [df[col] == df_existing_updated[col] for col in unique_id_cols], "left_anti")
+
+missing_count = df_missing_after_insert.count()
+if missing_count == 0:
+    print("All missing rows successfully inserted.")
+else:
+    print(f"There are still {missing_count} missing rows.")
+
+# Stop the Spark session
+spark.stop()
