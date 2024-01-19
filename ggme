@@ -1,0 +1,96 @@
+
+
+--find missing
+
+SELECT a.ID, a.version + 1 as start_missing_version
+FROM test a
+LEFT JOIN test b ON a.ID = b.ID AND a.version = b.version - 1
+WHERE b.ID IS NULL AND a.version < (SELECT MAX(version) FROM test WHERE ID = a.ID)
+ORDER BY a.ID, start_missing_version;
+This query works as follows:
+
+It selects records from the test table (aliased as a).
+It performs a left join on the same table (aliased as b), matching each record with the one that has the next higher version number for the same ID.
+The WHERE clause filters out records where no matching next-version record exists (i.e., b.ID IS NULL), indicating a missing version right after the current one.
+The additional condition in the WHERE clause (a.version < (SELECT MAX(version) FROM test WHERE ID = a.ID)) ensures that the query does not flag the highest existing version number for each ID as missing a subsequent version.
+The results are ordered by ID and the start of the missing version sequence.
+This query assumes that:
+
+The ID and version columns uniquely identify a record.
+The version number starts from a known value (e.g., 1) and increments by 1 for each update.
+There are no duplicate version numbers for the same ID.
+Please adjust the query as needed to fit your specific database schema and requirements.
+
+
+--HashTableColumns 1
+
+
+CREATE OR ALTER PROCEDURE HashTableColumns
+    @TableName NVARCHAR(128),
+    @ExcludeColumns NVARCHAR(MAX), -- Comma-separated column names to exclude
+    @ChecksumColumn NVARCHAR(128) = 'checksum', -- Name of the checksum column, default is 'checksum'
+    @SpecificID NVARCHAR(128) -- Specific ID to hash
+AS
+BEGIN
+    DECLARE @Sql NVARCHAR(MAX);
+    DECLARE @Columns NVARCHAR(MAX);
+
+    -- Check if the checksum column exists, if not, add it
+    IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.COLUMNS 
+                   WHERE TABLE_NAME = @TableName AND COLUMN_NAME = @ChecksumColumn)
+    BEGIN
+        SET @Sql = 'ALTER TABLE ' + QUOTENAME(@TableName) + 
+                   ' ADD ' + QUOTENAME(@ChecksumColumn) + ' VARBINARY(8000);';
+        PRINT 'Adding checksum column: ' + @Sql;
+        EXEC sp_executesql @Sql;
+    END
+
+    -- Reset @Sql for the next operation
+    SET @Sql = '';
+
+    -- Create a list of columns to be hashed, excluding the specified ones and the checksum column
+    SELECT @Columns = STRING_AGG(CAST('CONVERT(NVARCHAR(MAX), ' + COLUMN_NAME + ')' AS NVARCHAR(MAX)), ' + ')
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_NAME = @TableName
+      AND COLUMN_NAME <> @ChecksumColumn
+      AND CHARINDEX(COLUMN_NAME, @ExcludeColumns) = 0;
+
+    -- Build the dynamic SQL for updating the checksum for a specific ID
+    SET @Sql = '
+        UPDATE t
+        SET t.' + QUOTENAME(@ChecksumColumn) + ' = HASHBYTES(''MD5'', ' + @Columns + ')
+        FROM ' + QUOTENAME(@TableName) + ' t
+        WHERE t.ID = ' + QUOTENAME(@SpecificID, '''') + ';';
+    
+    PRINT 'Dynamic SQL to update checksum: ' + @Sql;
+
+    -- Execute the dynamic SQL
+    EXEC sp_executesql @Sql;
+END;
+
+
+--
+EXEC HashTableColumns 'YourTableName', 'ColumnToExclude1,ColumnToExclude2', '123';
+
+
+-----------------------------
+
+ALTER TABLE your_table
+ADD RankedVersion BIGINT;
+
+
+WITH VersionRankings AS (
+    SELECT
+        ID,
+        version,
+        ROW_NUMBER() OVER (PARTITION BY ID ORDER BY version DESC) AS RankedVersion
+    FROM
+        your_table
+)
+UPDATE your_table
+SET your_table.RankedVersion = VersionRankings.RankedVersion
+FROM your_table
+INNER JOIN VersionRankings
+ON your_table.ID = VersionRankings.ID AND your_table.version = VersionRankings.version;
+
+------------------
