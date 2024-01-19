@@ -1,0 +1,40 @@
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, lit
+
+# Initialize Spark Session
+spark = SparkSession.builder.appName("DeltaLake_BondEquity_Union_Corrected").getOrCreate()
+
+# Load the tables
+bond_issue_df = spark.table("bond.issue")
+equity_issue_df = spark.table("equity.issue")
+
+# Find all columns in both DataFrames
+bond_columns = set(bond_issue_df.columns)
+equity_columns = set(equity_issue_df.columns)
+
+# Determine columns that are missing in each DataFrame
+bond_missing_columns = equity_columns - bond_columns
+equity_missing_columns = bond_columns - equity_columns
+
+# Add missing columns to bond DataFrame
+for col_name in bond_missing_columns:
+    bond_issue_df = bond_issue_df.withColumn(col_name, lit(None))
+
+# Add missing columns to equity DataFrame
+for col_name in equity_missing_columns:
+    equity_issue_df = equity_issue_df.withColumn(col_name, lit(None))
+
+# Ensure the order of columns is the same in both DataFrames
+common_columns = bond_columns.union(equity_columns)
+bond_issue_df = bond_issue_df.select(*common_columns)
+equity_issue_df = equity_issue_df.select(*common_columns)
+
+# Union the dataframes
+union_df = bond_issue_df.unionByName(equity_issue_df)
+
+# Save the new table to Delta Lake
+new_table_name = "union_bond_equity_issue_table_corrected"
+union_df.write.format("delta").saveAsTable(new_table_name)
+
+# Stop the Spark session
+spark.stop()
