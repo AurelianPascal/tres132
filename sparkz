@@ -1,0 +1,53 @@
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, lit
+
+# Initialize Spark Session
+spark = SparkSession.builder.appName("DeltaLake_MultiTable_Union").getOrCreate()
+
+# Load the tables
+bond_issue_df = spark.table("bond.issue")
+equity_issue_df = spark.table("equity.issue")
+future_df = spark.table("future")
+option_df = spark.table("option")
+
+# Function to filter columns based on prefix
+def filter_columns(df, prefixes):
+    return [column for column in df.columns if any(column.lower().startswith(prefix.lower()) for prefix in prefixes)]
+
+# Filter columns
+prefixes = ["event", "issue"]
+bond_columns = filter_columns(bond_issue_df, prefixes)
+equity_columns = filter_columns(equity_issue_df, prefixes)
+future_columns = filter_columns(future_df, prefixes)
+option_columns = filter_columns(option_df, prefixes)
+
+# Get the union of column names from all tables
+all_columns = list(set(bond_columns + equity_columns + future_columns + option_columns))
+
+# Function to select and add missing columns with null values for union compatibility
+def prepare_for_union(df, all_columns):
+    selected_columns = []
+    for column in all_columns:
+        if column in df.columns:
+            selected_columns.append(col(column))
+        else:
+            selected_columns.append(lit(None).alias(column))
+    return df.select(selected_columns)
+
+# Prepare dataframes for union
+bond_issue_prepared_df = prepare_for_union(bond_issue_df, all_columns)
+equity_issue_prepared_df = prepare_for_union(equity_issue_df, all_columns)
+future_prepared_df = prepare_for_union(future_df, all_columns)
+option_prepared_df = prepare_for_union(option_df, all_columns)
+
+# Union the dataframes
+union_df = bond_issue_prepared_df.unionByName(equity_issue_prepared_df) \
+                                 .unionByName(future_prepared_df) \
+                                 .unionByName(option_prepared_df)
+
+# Save the new table to Delta Lake
+new_table_name = "union_issue_table_extended"
+union_df.write.format("delta").saveAsTable(new_table_name)
+
+# Stop the Spark session
+spark.stop()
