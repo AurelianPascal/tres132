@@ -113,3 +113,24 @@ WITH RankedData AS (
 SELECT *
 FROM RankedData;
 
+
+
+WITH RankedData AS (
+    SELECT
+        ID,
+        EVENT_TIMESTAMP,
+        ASOFDATE,
+        ROW_NUMBER() OVER (
+            PARTITION BY ID 
+            ORDER BY EVENT_TIMESTAMP, ASOFDATE
+        ) AS Rank
+    FROM
+        your_table
+)
+UPDATE t
+SET t.RankColumn = rd.Rank
+FROM your_table t
+INNER JOIN RankedData rd
+    ON t.ID = rd.ID
+    AND t.EVENT_TIMESTAMP = rd.EVENT_TIMESTAMP
+    AND t.ASOFDATE = rd.ASOFDATE;
