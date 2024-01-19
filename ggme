@@ -98,3 +98,18 @@ ON your_table.ID = VersionRankings.ID AND your_table.version = VersionRankings.v
 
 SELECT DATEDIFF_BIG(MILLISECOND, '1970-01-01', CAST(your_datetime_string_column AS DATETIME)) FROM your_table;
 SELECT DATEDIFF_BIG(SECOND, '1970-01-01', CONVERT(DATETIME, your_datetime_string_column)) AS bigint_representation FROM your_table;
+
+
+WITH RankedData AS (
+    SELECT
+        *,
+        ROW_NUMBER() OVER (
+            PARTITION BY ID 
+            ORDER BY EVENT_TIMESTAMP, ASOFDATE
+        ) AS Rank
+    FROM
+        your_table
+)
+SELECT *
+FROM RankedData;
+
