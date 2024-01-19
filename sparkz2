@@ -1,40 +1,70 @@
+import logging
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, lit
 
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
 # Initialize Spark Session
-spark = SparkSession.builder.appName("DeltaLake_BondEquity_Union_Corrected").getOrCreate()
+logging.info("Initializing Spark Session.")
+spark = SparkSession.builder.appName("DeltaLake_BondEquity_Union_Logging").getOrCreate()
 
 # Load the tables
+logging.info("Loading bond.issue and equity.issue tables.")
 bond_issue_df = spark.table("bond.issue")
 equity_issue_df = spark.table("equity.issue")
 
+# Exclude columns starting with 'tl'
+logging.info("Excluding columns starting with 'tl'.")
+bond_issue_df = bond_issue_df.select(*[c for c in bond_issue_df.columns if not c.lower().startswith('tl')])
+equity_issue_df = equity_issue_df.select(*[c for c in equity_issue_df.columns if not c.lower().startswith('tl')])
+
+print("Columns in bond.issue after excluding 'tl':", bond_issue_df.columns)
+print("Columns in equity.issue after excluding 'tl':", equity_issue_df.columns)
+
 # Find all columns in both DataFrames
+logging.info("Determining columns in both dataframes.")
 bond_columns = set(bond_issue_df.columns)
 equity_columns = set(equity_issue_df.columns)
 
 # Determine columns that are missing in each DataFrame
+logging.info("Determining missing columns for each dataframe.")
 bond_missing_columns = equity_columns - bond_columns
 equity_missing_columns = bond_columns - equity_columns
 
+print("Missing columns in bond.issue:", bond_missing_columns)
+print("Missing columns in equity.issue:", equity_missing_columns)
+
 # Add missing columns to bond DataFrame
+logging.info("Adding missing columns to bond.issue dataframe.")
 for col_name in bond_missing_columns:
     bond_issue_df = bond_issue_df.withColumn(col_name, lit(None))
 
 # Add missing columns to equity DataFrame
+logging.info("Adding missing columns to equity.issue dataframe.")
 for col_name in equity_missing_columns:
     equity_issue_df = equity_issue_df.withColumn(col_name, lit(None))
 
 # Ensure the order of columns is the same in both DataFrames
-common_columns = bond_columns.union(equity_columns)
+logging.info("Aligning the order of columns in both dataframes.")
+common_columns = sorted(bond_columns.union(equity_columns))
 bond_issue_df = bond_issue_df.select(*common_columns)
 equity_issue_df = equity_issue_df.select(*common_columns)
 
+print("Final columns in bond.issue:", bond_issue_df.columns)
+print("Final columns in equity.issue:", equity_issue_df.columns)
+
 # Union the dataframes
+logging.info("Performing union of the dataframes.")
 union_df = bond_issue_df.unionByName(equity_issue_df)
 
 # Save the new table to Delta Lake
-new_table_name = "union_bond_equity_issue_table_corrected"
+new_table_name = "union_bond_equity_issue_table_excluding_tl"
+logging.info(f"Saving the unioned dataframe to Delta Lake as {new_table_name}.")
 union_df.write.format("delta").saveAsTable(new_table_name)
 
 # Stop the Spark session
+logging.info("Stopping Spark Session.")
 spark.stop()
+
+logging.info("Script completed successfully.")
