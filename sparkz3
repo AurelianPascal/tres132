@@ -1,0 +1,36 @@
+import logging
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, lit, to_date, current_date
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# SQL Server connection details
+jdbc_url = "jdbc:sqlserver://[ServerName];databaseName=[DatabaseName]"
+jdbc_properties = {
+    "user": "[Username]",
+    "password": "[Password]",
+    "driver": "com.microsoft.sqlserver.jdbc.SQLServerDriver"
+}
+
+# Initialize Spark Session
+logging.info("Initializing Spark Session.")
+spark = SparkSession.builder.appName("DeltaLake_BondEquity_Union_Filtered").getOrCreate()
+
+# Function to convert column names to lowercase and filter by AsOfDate
+def process_dataframe(df):
+    df = df.select([col(c).alias(c.lower()) for c in df.columns])
+    df = df.withColumn("asofdate", to_date(col("asofdate")))
+    return df.filter(col("asofdate") >= current_date() - expr("INTERVAL 5 DAYS"))
+
+# Load the tables, convert column names to lowercase and filter by AsOfDate
+logging.info("Loading and processing bond.issue and equity.issue tables.")
+bond_issue_df = process_dataframe(spark.table("bond.issue"))
+equity_issue_df = process_dataframe(spark.table("equity.issue"))
+
+# Exclude columns starting with 'tl'
+logging.info("Excluding columns starting with 'tl'.")
+bond_issue_df = bond_issue_df.select(*[c for c in bond_issue_df.columns if not c.startswith('tl')])
+equity_issue_df = equity_issue_df.select(*[c for c in equity_issue_df.columns if not c.startswith('tl')])
+
+# Rest of the script remains the same...
