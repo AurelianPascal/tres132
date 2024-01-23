@@ -1,0 +1,106 @@
+from pyspark.sql import SparkSession, functions as F
+from datetime import datetime, timedelta
+import sys
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger()
+
+# Initialize Spark session for Databricks
+try:
+    spark = SparkSession.builder.appName("Data Reconciliation").getOrCreate()
+    logger.info("Spark session started.")
+except Exception as e:
+    logger.error("Error starting Spark session: %s", e)
+    sys.exit(1)
+
+# Define your Delta table name and lookback period in hours
+delta_table_name = "your_delta_table"
+lookback_hours = sys.argv[1] if len(sys.argv) > 1 else None
+
+# Functions for SQL Server access
+def read_from_sqlserver(table):
+    try:
+        jdbc_url = "jdbc:sqlserver://yourserver.database.windows.net:1433;databaseName=yourdatabase"
+        properties = {
+            "user": "yourusername",
+            "password": "yourpassword",
+            "driver": "com.microsoft.sqlserver.jdbc.SQLServerDriver"
+        }
+        return spark.read.jdbc(url=jdbc_url, table=table, properties=properties)
+    except Exception as e:
+        logger.error("Error reading from SQL Server table %s: %s", table, e)
+        raise
+
+def write_to_sqlserver(df, table, mode="append"):
+    try:
+        jdbc_url = "jdbc:sqlserver://yourserver.database.windows.net:1433;databaseName=yourdatabase"
+        properties = {
+            "user": "yourusername",
+            "password": "yourpassword",
+            "driver": "com.microsoft.sqlserver.jdbc.SQLServerDriver"
+        }
+        df.write.jdbc(url=jdbc_url, table=table, mode=mode, properties=properties)
+        logger.info("Data written to SQL Server table %s.", table)
+    except Exception as e:
+        logger.error("Error writing to SQL Server table %s: %s", table, e)
+        raise
+
+# Read data from Delta Lake with optional lookback
+try:
+    delta_df = spark.read.format("delta").load(f"/path/to/{delta_table_name}")
+    if lookback_hours:
+        lookback_time = datetime.now() - timedelta(hours=int(lookback_hours))
+        delta_df = delta_df.filter(F.col("updatetime") >= lookback_time)
+    logger.info("Data read from Delta Lake.")
+except Exception as e:
+    logger.error("Error reading from Delta Lake: %s", e)
+    sys.exit(1)
+
+# Read data from SQL Server staging table
+try:
+    sqlserver_df = read_from_sqlserver("sqlserver_staging_table")
+    logger.info("Data read from SQL Server staging table.")
+except Exception as e:
+    logger.error("Error reading from SQL Server staging table: %s", e)
+    sys.exit(1)
+
+# Select necessary columns
+delta_df = delta_df.select("id", "event_version", "updatetime")
+sqlserver_df = sqlserver_df.select("id", "event_version", "updatetime")
+
+# Find missing rows in SQL Server
+missing_rows_df = delta_df.subtract(sqlserver_df)
+
+# Add Delta table name to the DataFrame
+missing_rows_df = missing_rows_df.withColumn("delta_table_name", F.lit(delta_table_name))
+
+# Write missing rows to the breaks table in SQL Server
+missing_rows_df = missing_rows_df.withColumn("resolved", F.lit(0))
+try:
+    write_to_sqlserver(missing_rows_df, "mssql_breaks_table")
+    logger.info("Missing rows written to breaks table.")
+except Exception as e:
+    logger.error("Error writing missing rows to breaks table: %s", e)
+    sys.exit(1)
+
+# Logic to identify resolved breaks
+try:
+    breaks_df = read_from_sqlserver("mssql_breaks_table").where(F.col("delta_table_name") == delta_table_name)
+    resolved_breaks_df = breaks_df.join(sqlserver_df, ["id", "event_version", "updatetime"], "inner")
+    resolved_breaks_df = resolved_breaks_df.withColumn("resolved", F.lit(1))
+
+    # Write updates to the breaks table
+    write_to_sqlserver(resolved_breaks_df, "mssql_breaks_table", mode="update")
+    logger.info("Resolved breaks updated in breaks table.")
+except Exception as e:
+    logger.error("Error processing resolved breaks: %s", e)
+    sys.exit(1)
+
+# Stop Spark session
+try:
+    spark.stop()
+    logger.info("Spark session stopped.")
+except Exception as e:
+    logger.error("Error stopping Spark session: %s", e)
