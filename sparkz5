@@ -124,3 +124,18 @@ SELECT DISTINCT id, version
 FROM test.deltatable
 WHERE lastUpdateTime >= CURRENT_DATE - INTERVAL 100 DAYS;
 
+CREATE OR REPLACE MATERIALIZED VIEW test.materializedViewName AS
+SELECT 
+    id, 
+    version, 
+    name, 
+    year
+FROM (
+    SELECT *,
+        ROW_NUMBER() OVER (PARTITION BY id, version ORDER BY lastUpdateTime DESC) as rn
+    FROM test.deltatable
+    WHERE lastUpdateTime >= CURRENT_DATE - INTERVAL 100 DAYS
+) tmp
+WHERE rn = 1;
+
+
