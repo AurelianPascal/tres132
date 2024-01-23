@@ -101,3 +101,26 @@ union_df.write.format("delta").saveAsTable(new_table_name)
 # Stop the Spark session
 spark.stop()
 
+
+##################
+
+from pyspark.sql import SparkSession
+
+# Initialize a SparkSession
+spark = SparkSession.builder.appName("ReadFirstRowDeltaTable").getOrCreate()
+
+# Read the Delta table into a DataFrame
+deltaTableDF = spark.read.format("delta").load("/path/to/delta/table")
+
+# Get the first row
+firstRowDF = deltaTableDF.limit(1)
+
+# Show the first row
+firstRowDF.show()
+####################
+
+CREATE OR REPLACE MATERIALIZED VIEW test.materializedViewName AS
+SELECT DISTINCT id, version
+FROM test.deltatable
+WHERE lastUpdateTime >= CURRENT_DATE - INTERVAL 100 DAYS;
+
