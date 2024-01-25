@@ -121,4 +121,29 @@ echo "Log error count check completed."
 
 cat pod.yaml | grep -A1 "env:" | awk 'NR%2==0 {print $2}'
 
+#!/bin/bash
+
+# Replace these with your actual pod name and namespace
+POD_NAME="dapi-envars-fieldref"
+NAMESPACE="your-namespace"
+
+# Get the YAML of the Pod
+kubectl get pod "$POD_NAME" -n "$NAMESPACE" -o yaml > pod.yaml
+
+# Extracting environment variables
+echo "Environment Variables in Pod $POD_NAME:"
+grep -B 2 'fieldPath' pod.yaml | 
+while IFS= read -r line; do
+    if [[ $line == *name:* ]]; then
+        var_name=$(echo $line | sed 's/.*name: //')
+    elif [[ $line == *fieldPath:* ]]; then
+        field_path=$(echo $line | sed 's/.*fieldPath: //')
+        echo "$var_name: $field_path"
+    fi
+done
+
+# Clean up
+rm pod.yaml
+
+
   
