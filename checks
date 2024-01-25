@@ -1,0 +1,122 @@
+#!/bin/bash
+
+# Namespace
+NAMESPACE="feed"
+
+# Get all pods in the namespace
+PODS=$(kubectl get pods -n $NAMESPACE -o jsonpath="{.items[*].metadata.name}")
+
+echo "Checking restart reasons and error counts for all pods in the $NAMESPACE namespace..."
+
+# Loop through each pod
+for POD in $PODS; do
+    echo "Checking pod $POD..."
+
+    # Initialize error count
+    ERROR_COUNT=0
+
+    # Check if the pod has restarts
+    RESTARTS=$(kubectl get pod $POD -n $NAMESPACE -o jsonpath="{.status.containerStatuses[*].restartCount}")
+    
+    if [ "$RESTARTS" -ne 0 ]; then
+        # If there are restarts, get the last restart reason and count errors
+        CONTAINER_STATUSES=$(kubectl get pod $POD -n $NAMESPACE -o jsonpath="{.status.containerStatuses[*]}")
+
+        for STATUS in $CONTAINER_STATUSES; do
+            LAST_STATE=$(echo $STATUS | jq '.lastState.terminated')
+            if [ "$LAST_STATE" != "null" ]; then
+                EXIT_CODE=$(echo $LAST_STATE | jq '.exitCode')
+                if [ "$EXIT_CODE" != "0" ]; then
+                    ((ERROR_COUNT++))
+                fi
+            fi
+        done
+
+        RESTART_REASON=$(kubectl get pod $POD -n $NAMESPACE -o jsonpath="{.status.containerStatuses[*].lastState.terminated.reason}")
+        [ -z "$RESTART_REASON" ] && RESTART_REASON="Unknown"
+
+        echo "Pod $POD has restarted $RESTARTS times. Last restart reason: $RESTART_REASON. Error count: $ERROR_COUNT."
+    else
+        echo "Pod $POD has no restarts."
+    fi
+done
+
+echo "Restart reason and error count check completed."
+
+
+  ##################
+
+  #!/bin/bash
+
+# Namespace
+NAMESPACE="feed"
+
+# Get all pods in the namespace
+PODS=$(kubectl get pods -n $NAMESPACE -o jsonpath="{.items[*].metadata.name}")
+
+echo "Checking restart reasons and error counts for all pods in the $NAMESPACE namespace..."
+
+# Loop through each pod
+for POD in $PODS; do
+    echo "Checking pod $POD..."
+
+    # Initialize error count
+    ERROR_COUNT=0
+
+    # Check if the pod has restarts
+    RESTARTS=$(kubectl get pod $POD -n $NAMESPACE -o jsonpath="{.status.containerStatuses[*].restartCount}")
+    
+    if [ "$RESTARTS" -ne 0 ]; then
+        # If there are restarts, get the last restart reason and count errors
+        CONTAINER_STATUSES=$(kubectl get pod $POD -n $NAMESPACE -o jsonpath="{.status.containerStatuses[*]}")
+
+        for STATUS in $CONTAINER_STATUSES; do
+            LAST_STATE=$(echo $STATUS | jq '.lastState.terminated')
+            if [ "$LAST_STATE" != "null" ]; then
+                EXIT_CODE=$(echo $LAST_STATE | jq '.exitCode')
+                if [ "$EXIT_CODE" != "0" ]; then
+                    ((ERROR_COUNT++))
+                fi
+            fi
+        done
+
+        RESTART_REASON=$(kubectl get pod $POD -n $NAMESPACE -o jsonpath="{.status.containerStatuses[*].lastState.terminated.reason}")
+        [ -z "$RESTART_REASON" ] && RESTART_REASON="Unknown"
+
+        echo "Pod $POD has restarted $RESTARTS times. Last restart reason: $RESTART_REASON. Error count: $ERROR_COUNT."
+    else
+        echo "Pod $POD has no restarts."
+    fi
+done
+
+echo "Restart reason and error count check completed."
+
+  ####
+
+  #!/bin/bash
+
+# Namespace
+NAMESPACE="feed"
+
+# Get all pods with "live" in the name
+PODS=$(kubectl get pods -n $NAMESPACE -o jsonpath="{.items[?(@.metadata.name contains 'live')].metadata.name}")
+
+echo "Checking for errors in logs of pods containing 'live' in the $NAMESPACE namespace..."
+
+# Loop through each pod
+for POD in $PODS; do
+    echo "Checking pod $POD..."
+
+    # Get the log of the pod
+    LOG=$(kubectl logs $POD -n $NAMESPACE)
+
+    # Count the number of errors in the log
+    ERROR_COUNT=$(echo "$LOG" | grep -i "error" | wc -l)
+
+    echo "Pod $POD has $ERROR_COUNT errors in its logs."
+done
+
+echo "Log error count check completed."
+
+
+  
