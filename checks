@@ -119,4 +119,6 @@ done
 echo "Log error count check completed."
 
 
+cat pod.yaml | grep -A1 "env:" | awk 'NR%2==0 {print $2}'
+
   
