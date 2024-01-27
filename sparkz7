@@ -263,4 +263,88 @@ partitions = 10
 all_dataframes_combined = all_dataframes_combined.repartition(partitions)
 
 
+############################################################
+'###############
+
+import logging
+from pyspark.sql import SparkSession, functions as F
+from pyspark.sql.types import StringType
+import time
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Start time
+start_time = time.time()
+logging.info("Script started.")
+
+# SQL Server connection details
+jdbc_url = "jdbc:sqlserver://[ServerName];databaseName=[DatabaseName]"
+jdbc_properties = {
+    "user": "[Username]",
+    "password": "[Password]",
+    "driver": "com.microsoft.sqlserver.jdbc.SQLServerDriver"
+}
+
+# Initialize Spark Session
+logging.info("Initializing Spark Session.")
+spark = SparkSession.builder.appName("DeltaLake_FinancialData_Processing").getOrCreate()
+
+# Function to process DataFrame and convert VoidType columns to StringType, and filter by third latest asofdate
+def process_dataframe(df):
+    df = df.select([F.col(c).alias(c.lower()) for c in df.columns])
+    df = df.withColumn("asofdate", F.to_date(F.col("asofdate")))
+
+    # Find the third latest asofdate
+    third_latest_date = df.select("asofdate")\
+                          .distinct()\
+                          .orderBy(F.desc("asofdate"))\
+                          .limit(3)\
+                          .collect()[2]["asofdate"]
+
+    # Filter by the third latest asofdate and onwards
+    df = df.filter(F.col("asofdate") >= third_latest_date)
+
+    # Convert VoidType columns to StringType
+    for column, dtype in df.dtypes:
+        if dtype == 'void':
+            df = df.withColumn(column, F.lit(None).cast(StringType()))
+
+    return df.limit(1000)
+
+# Load and process the tables
+logging.info("Loading and processing financial tables.")
+bond_issue_df = process_dataframe(spark.table("bond.issue"))
+equity_issue_df = process_dataframe(spark.table("equity.issue"))
+options_df = process_dataframe(spark.table("options.issue"))
+futures_df = process_dataframe(spark.table("futures.issue"))
+
+# Union all DataFrames
+all_dataframes_combined = bond_issue_df.union(equity_issue_df)\
+                                       .union(options_df)\
+                                       .union(futures_df)
+
+# Repartition the DataFrame for optimized writing
+partitions = 10
+all_dataframes_combined = all_dataframes_combined.repartition(partitions)
+
+# Write the combined DataFrame to SQL Server
+logging.info("Writing the combined DataFrame to SQL Server.")
+all_dataframes_combined.write \
+    .format("jdbc") \
+    .option("url", jdbc_url) \
+    .option("dbtable", "all_dataframes") \
+    .option("user", jdbc_properties["user"]) \
+    .option("password", jdbc_properties["password"]) \
+    .option("driver", jdbc_properties["driver"]) \
+    .mode("append")  # use "overwrite" if you want to replace the table
+    .save()
+
+logging.info("Data written to SQL Server.")
+
+# End time
+end_time = time.time()
+logging.info(f"Script ended. Total execution time: {end_time - start_time} seconds.")
+
+
 
