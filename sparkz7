@@ -21,7 +21,7 @@ jdbc_properties = {
 logging.info("Initializing Spark Session.")
 spark = SparkSession.builder.appName("DeltaLake_BondEquity_Union_Filtered").getOrCreate()
 
-# Function to convert column names to lowercase, filter by max AsOfDate, and drop year and month columns
+# Function to convert column names to lowercase, filter by max AsOfDate, drop year and month columns, and keep only string columns
 def process_dataframe(df):
     df = df.select([F.col(c).alias(c.lower()) for c in df.columns])
     df = df.withColumn("asofdate", F.to_date(F.col("asofdate")))
@@ -32,7 +32,10 @@ def process_dataframe(df):
     # Filter by the maximum asofdate
     df = df.filter(F.col("asofdate") == max_asofdate)
 
-    df = df.drop('year', 'month')
+    # Select only string columns
+    string_columns = [col_name for col_name, dtype in df.dtypes if dtype == 'string']
+    df = df.select(*string_columns)
+
     return df.limit(1000)
 
 # Load the tables, process, and take only 1000 rows from each
