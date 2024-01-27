@@ -347,4 +347,31 @@ end_time = time.time()
 logging.info(f"Script ended. Total execution time: {end_time - start_time} seconds.")
 
 
+###################
+
+from pyspark.sql import DataFrame
+
+def filter_columns_startswith(df: DataFrame, columns_prefixes: list, include=True) -> DataFrame:
+    """
+    Include or exclude columns from a DataFrame based on whether they start with any string in columns_prefixes.
+
+    :param df: The input DataFrame.
+    :param columns_prefixes: A list of string prefixes to match column names against.
+    :param include: Flag to determine whether to include or exclude the columns. Default is True.
+    :return: Modified DataFrame.
+    """
+    if include:
+        # Include columns that start with any of the prefixes in columns_prefixes
+        return df.select(*[col for col in df.columns if any(col.startswith(prefix) for prefix in columns_prefixes)])
+    else:
+        # Exclude columns that start with any of the prefixes in columns_prefixes
+        return df.select(*[col for col in df.columns if not any(col.startswith(prefix) for prefix in columns_prefixes)])
+
+# Example usage:
+# Assuming 'spark_df' is your Spark DataFrame
+columns_to_filter = ["col_prefix1", "col_prefix2"]
+modified_df = filter_columns_startswith(spark_df, columns_to_filter, include=True)  # Set include=False to exclude
+
+
+
 
