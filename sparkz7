@@ -249,3 +249,18 @@ end_time = time.time()
 logging.info(f"Script ended. Total execution time: {end_time - start_time} seconds.")
 
 
+]
+
+
+
+# Union all DataFrames
+all_dataframes_combined = bond_issue_df.union(equity_issue_df)\
+                                       .union(options_df)\
+                                       .union(futures_df)
+
+# Repartition the DataFrame for optimized writing
+partitions = 10
+all_dataframes_combined = all_dataframes_combined.repartition(partitions)
+
+
+
