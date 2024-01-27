@@ -182,3 +182,70 @@ end_time = time.time()
 logging.info(f"Script ended. Total execution time: {end_time - start_time} seconds.")
 
 
+#####
+
+import logging
+from pyspark.sql import SparkSession, functions as F
+from pyspark.sql.types import StringType
+import time
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format=''%(asctime)s - %(levelname)s - %(message)s'')
+
+# Start time
+start_time = time.time()
+logging.info("Script started.")
+
+# SQL Server connection details
+jdbc_url = "jdbc:sqlserver://[ServerName];databaseName=[DatabaseName]"
+jdbc_properties = {
+    "user": "[Username]",
+    "password": "[Password]",
+    "driver": "com.microsoft.sqlserver.jdbc.SQLServerDriver"
+}
+
+# Initialize Spark Session
+logging.info("Initializing Spark Session.")
+spark = SparkSession.builder.appName("DeltaLake_FinancialData_Processing").getOrCreate()
+
+# Function to process DataFrame and convert VoidType columns to StringType
+def process_dataframe(df):
+    # Convert VoidType columns to StringType
+    for column, dtype in df.dtypes:
+        if dtype == 'void':
+            df = df.withColumn(column, F.lit(None).cast(StringType()))
+
+    # Your existing processing code here...
+
+    return df
+
+# Load and process the tables
+logging.info("Loading and processing financial tables.")
+bond_issue_df = process_dataframe(spark.table("bond.issue"))
+equity_issue_df = process_dataframe(spark.table("equity.issue"))
+options_df = process_dataframe(spark.table("options.issue"))
+futures_df = process_dataframe(spark.table("futures.issue"))
+
+# Get the union of all column names and sort them
+all_columns = sorted(set(bond_issue_df.columns) | set(equity_issue_df.columns) | set(options_df.columns) | set(futures_df.columns))
+
+# Function to add missing columns to a DataFrame
+def add_missing_columns(df, columns):
+    missing_columns = [col for col in columns if col not in df.columns]
+    for col in missing_columns:
+        df = df.withColumn(col, F.lit(None).cast(StringType()))
+    return df
+
+# Add missing columns to each DataFrame and select columns in consistent order
+bond_issue_df = add_missing_columns(bond_issue_df, all_columns).select(*all_columns)
+equity_issue_df = add_missing_columns(equity_issue_df, all_columns).select(*all_columns)
+options_df = add_missing_columns(options_df, all_columns).select(*all_columns)
+futures_df = add_missing_columns(futures_df, all_columns).select(*all_columns)
+
+# Add any additional processing or actions here...
+
+# End time
+end_time = time.time()
+logging.info(f"Script ended. Total execution time: {end_time - start_time} seconds.")
+
+
