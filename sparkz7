@@ -372,6 +372,9 @@ def filter_columns_startswith(df: DataFrame, columns_prefixes: list, include=Tru
 columns_to_filter = ["col_prefix1", "col_prefix2"]
 modified_df = filter_columns_startswith(spark_df, columns_to_filter, include=True)  # Set include=False to exclude
 
+#fu
+kubectl get cronjobs -n <namespace> -o name | xargs -I {} kubectl patch {} -n <namespace> -p '{"spec" : {"suspend" : true }}' --type=merge
+
 
 
 
