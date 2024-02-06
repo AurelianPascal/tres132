@@ -1,0 +1,67 @@
+WITH CTE AS (
+  SELECT
+    PK,
+    MIN(eventtime) AS MinEventTime
+  FROM tableA
+  GROUP BY PK
+)
+DELETE FROM tableA
+WHERE EXISTS (
+  SELECT 1
+  FROM CTE
+  WHERE tableA.PK = CTE.PK
+    AND tableA.eventtime > CTE.MinEventTime
+);
+
+CREATE VIEW latest_records_non_indexed AS
+SELECT *
+FROM (
+    SELECT *,
+           ROW_NUMBER() OVER (
+               PARTITION BY id version
+               ORDER BY event_version DESC, insertTime DESC
+           ) AS rn
+    FROM all_dataframes
+) AS ranked
+WHERE ranked.rn = 1;
+
+CREATE VIEW vw_latest_history AS
+SELECT *
+FROM (
+    SELECT *,
+           ROW_NUMBER() OVER (
+               PARTITION BY id, event_version
+               ORDER BY insertTime DESC
+           ) AS rn
+    FROM all_dataframes
+) AS ranked
+WHERE ranked.rn = 1;
+
+-- Create the view with schemabinding
+CREATE VIEW latest_records
+WITH SCHEMABINDING
+AS
+SELECT id, MAX(event_version) AS max_event_version, MAX(insertTime) AS latest_insertTime
+FROM dbo.all_dataframes
+GROUP BY id;
+GO
+
+
+-- Create a unique clustered index on the view
+CREATE UNIQUE CLUSTERED INDEX idx_latest_records ON latest_records (id);
+GO
+
+
+DAY0 Scripts
+1. Load all to main table , create a new primary key. 
+2. Remove duplicates.
+3. A View represents latest.
+
+Day1 onwards script
+1. get max last_update_time from main.
+2.load dataframe asof ($batchdate) where last_update_time >  $last_update_time
+3.get count of records.
+4. write all to staging table.
+5. check count of staging matches expected . else fail job. -- later we autorec / self heal
+
+
