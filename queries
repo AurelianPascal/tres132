@@ -65,3 +65,21 @@ Day1 onwards script
 5. check count of staging matches expected . else fail job. -- later we autorec / self heal
 
 
+
+
+##
+
+WITH RankedData AS (
+    SELECT
+        rv,
+        ROW_NUMBER() OVER (
+            PARTITION BY id
+            ORDER BY event_version DESC, event_updatetime DESC
+        ) AS NewRankedVersion
+    FROM
+        your_table_name
+)
+UPDATE your_table_name
+SET rv = RankedData.NewRankedVersion
+FROM your_table_name
+INNER JOIN RankedData ON your_table_name.PrimaryKeyColumn = RankedData.PrimaryKeyColumn;
