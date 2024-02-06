@@ -372,9 +372,25 @@ def filter_columns_startswith(df: DataFrame, columns_prefixes: list, include=Tru
 columns_to_filter = ["col_prefix1", "col_prefix2"]
 modified_df = filter_columns_startswith(spark_df, columns_to_filter, include=True)  # Set include=False to exclude
 
-#fu
-kubectl get cronjobs -n <namespace> -o name | xargs -I {} kubectl patch {} -n <namespace> -p '{"spec" : {"suspend" : true }}' --type=merge
+###################### inserttime
+from pyspark.sql import functions as F
 
+# Assuming `all_dataframes_combined` is your combined DataFrame
+# Add a new column `insertTime` with the current timestamp
+all_dataframes_combined = all_dataframes_combined.withColumn("insertTime", F.current_timestamp())
+
+# Now, proceed with the write operation as before
+all_dataframes_combined.write \
+    .format("jdbc") \
+    .option("url", jdbc_url) \
+    .option("dbtable", "all_dataframes") \
+    .option("user", jdbc_properties["user"]) \
+    .option("password", jdbc_properties["password"]) \
+    .option("driver", jdbc_properties["driver"]) \
+    .mode("append")  # Ensure mode is set to "append" to add data to the existing table
+    .save()
+
+#########################
 
 
 
