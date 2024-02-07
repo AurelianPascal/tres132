@@ -105,3 +105,35 @@ actual_count = df.count()  # Get the actual count after some operations
 log_discrepancy(spark, actual_count, batch_insert_time)
 
 
+##############
+
+from pyspark.sql import SparkSession
+import datetime
+
+# Initialize SparkSession
+spark = SparkSession.builder \
+    .appName("SQL Server JDBC Example") \
+    .getOrCreate()
+
+# JDBC connection properties
+jdbcUrl = "jdbc:sqlserver://your_server.database.windows.net:1433;databaseName=your_database"
+connectionProperties = {
+  "user" : "your_username",
+  "password" : "your_password",
+  "driver" : "com.microsoft.sqlserver.jdbc.SQLServerDriver"
+}
+
+# Generate current timestamp in Spark
+current_timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+# Format the SQL query string with the current timestamp
+query = f"(SELECT COUNT(*) AS count FROM mytable WHERE insertTime = '{current_timestamp}') AS queryAlias"
+
+# Execute query
+df = spark.read.jdbc(url=jdbcUrl, table=query, properties=connectionProperties)
+
+# Show results
+df.show()
+
+
+
