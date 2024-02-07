@@ -1,0 +1,107 @@
+CREATE TABLE dbo.ProcessingLog (
+    LogID INT IDENTITY(1,1) PRIMARY KEY,
+    LogType VARCHAR(50),
+    RecordCount INT,
+    BatchInsertTime DATETIME,
+    StartTime DATETIME,
+    EndTime DATETIME
+);
+
+
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import lit
+
+def log_expected_count(spark_session, expected_count, batch_insert_time):
+    """
+    Logs the expected count of records to SQL Server.
+    
+    :param spark_session: Active SparkSession
+    :param expected_count: The expected count of records
+    :param batch_insert_time: The timestamp associated with the batch process
+    """
+    log_df = spark_session.createDataFrame([(expected_count,)], ["RecordCount"])
+    log_df = log_df.withColumn("LogType", lit("ExpectedCount")) \
+                   .withColumn("BatchInsertTime", lit(batch_insert_time))
+
+    # Add empty columns for StartTime and EndTime for schema consistency
+    log_df = log_df.withColumn("StartTime", lit(None).cast("timestamp")) \
+                   .withColumn("EndTime", lit(None).cast("timestamp"))
+
+    # Write the log to SQL Server
+    log_df.write \
+          .format("jdbc") \
+          .option("url", url) \
+          .option("dbtable", "ProcessingLog") \
+          .option("user", "<your_username>") \
+          .option("password", "<your_password>") \
+          .mode("append") \
+          .save()
+
+
+def log_discrepancy(spark_session, actual_count, batch_insert_time):
+    """
+    Checks for discrepancies between expected and actual counts and logs them.
+    
+    :param spark_session: Active SparkSession
+    :param actual_count: The actual count of records from the DataFrame
+    :param batch_insert_time: The timestamp for comparison
+    """
+    # Retrieve the expected count from the database
+    query = f"(SELECT RecordCount FROM ProcessingLog WHERE LogType = 'ExpectedCount' AND BatchInsertTime = '{batch_insert_time}') AS expected_counts"
+    expected_count_df = spark_session.read \
+                                     .format("jdbc") \
+                                     .option("url", url) \
+                                     .option("query", query) \
+                                     .option("user", "<your_username>") \
+                                     .option("password", "<your_password>") \
+                                     .load()
+
+    if not expected_count_df.rdd.isEmpty():
+        expected_count = expected_count_df.collect()[0][0]
+        discrepancy = abs(actual_count - expected_count)
+        
+        if discrepancy > 0:
+            # Log the discrepancy
+            discrepancy_df = spark_session.createDataFrame([(discrepancy,)], ["RecordCount"])
+            discrepancy_df = discrepancy_df.withColumn("LogType", lit("Discrepancy")) \
+                                           .withColumn("BatchInsertTime", lit(batch_insert_time)) \
+                                           .withColumn("StartTime", current_timestamp()) \
+                                           .withColumn("EndTime", current_timestamp())
+            
+            # Write the discrepancy log to SQL Server
+            discrepancy_df.write \
+                          .format("jdbc") \
+                          .option("url", url) \
+                          .option("dbtable", "ProcessingLog") \
+                          .option("user", "<your_username>") \
+                          .option("password", "<your_password>") \
+                          .mode("append") \
+                          .save()
+
+
+
+from pyspark.sql import SparkSession
+import datetime
+
+# Initialize SparkSession (if not already initialized)
+spark = SparkSession.builder.appName("DataProcessingLog").getOrCreate()
+
+# Example DataFrame `df` representing your data processing result
+# df = ... your data processing logic here ...
+
+# Example variables
+url = "jdbc:sqlserver://<your_server>.database.windows.net:1433;databaseName=<your_database>;user=<your_username>;password=<your_password>;encrypt=true;trustServerCertificate=false;hostNameInCertificate=*.database.windows.net;loginTimeout=30;"
+batch_insert_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")  # Current timestamp
+
+# 1. Log Expected Count
+expected_count = df.count()  # Get the expected count from your DataFrame
+log_expected_count(spark, expected_count, batch_insert_time)
+
+# Perform some operations (if any) that might change the count
+# df = ... some operations ...
+
+# 2. Log Discrepancy after operations
+actual_count = df.count()  # Get the actual count after some operations
+log_discrepancy(spark, actual_count, batch_insert_time)
+
+
