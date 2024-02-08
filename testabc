@@ -135,5 +135,8 @@ df = spark.read.jdbc(url=jdbcUrl, table=query, properties=connectionProperties)
 # Show results
 df.show()
 
+from pyspark.sql.functions import col
 
+df = df.withColumn("eventdate", col("eventdate").cast("date"))
+df = df.withColumn("version", col("version").cast("int"))
 
