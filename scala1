@@ -1,0 +1,94 @@
+CREATE TABLE reconciliation_discrepancies (
+    id INT, -- Adjust if your ID datatype differs
+    event_version INT,
+    datatype VARCHAR(255),
+    created_at DATETIME DEFAULT GETDATE(), -- Timestamp of when the discrepancy was recorded
+    PRIMARY KEY (id, event_version, datatype) -- Adjust the primary key as necessary
+);
+
+import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.functions._
+
+object DataReconciliation {
+
+  def initSparkSession(appName: String): SparkSession = {
+    SparkSession.builder.appName(appName).getOrCreate()
+  }
+
+  def loadDeltaData(spark: SparkSession, deltaPath: String, lastReconciliationTime: String): DataFrame = {
+    spark.read.format("delta").load(deltaPath)
+      .select("id", "event_version", "last_updated_time")
+      .filter(s"last_updated_time >= '$lastReconciliationTime'")
+  }
+
+  def loadSqlData(spark: SparkSession, readOptions: Map[String, String], lastReconciliationTime: String): DataFrame = {
+    spark.read.format("com.microsoft.sqlserver.jdbc.spark")
+      .options(readOptions)
+      .load()
+      .select("id", "event_version", "last_updated_time")
+      .filter(s"last_updated_time >= '$lastReconciliationTime'")
+  }
+
+  def writeDataToSql(df: DataFrame, writeOptions: Map[String, String]): Unit = {
+    df.write.format("com.microsoft.sqlserver.jdbc.spark").options(writeOptions).mode("append").save()
+  }
+
+  def identifyAndWriteDiscrepancies(deltaDf: DataFrame, sqlDf: DataFrame, writeOptions: Map[String, String]): Unit = {
+    val diffsToSave = deltaDf.join(sqlDf, Seq("id", "event_version"), "full_outer")
+      .where(deltaDf("id").isNull || sqlDf("id").isNull)
+      .select(deltaDf("id"), deltaDf("event_version"), lit("example_datatype").as("datatype"))
+      .withColumn("created_at", current_timestamp())
+
+    writeDataToSql(diffsToSave, writeOptions)
+  }
+
+  def main(args: Array[String]): Unit = {
+    val spark = initSparkSession("ReconciliationProcess")
+
+    val deltaPath = "path_to_your_delta_table" // Example: "/mnt/delta/events"
+    val lastReconciliationTime = "2023-01-01T00:00:00"
+    
+    // Dummy SQL Server connection details
+    val serverName = "your_server.database.windows.net"
+    val portNumber = "1433"
+    val databaseName = "your_database_name"
+    val user = "your_username"
+    val password = "your_password"
+    val dbTable = "events"
+    val discrepancyTable = "reconciliation_discrepancies"
+
+    val readOptions = Map(
+      "url" -> s"jdbc:sqlserver://$serverName:$portNumber;databaseName=$databaseName",
+      "dbtable" -> dbTable,
+      "user" -> user,
+      "password" -> password,
+      "partitionColumn" -> "id", // Adjust as needed
+      "lowerBound" -> "1",
+      "upperBound" -> "10000",
+      "numPartitions" -> "4"
+    )
+
+    val writeOptions = Map(
+      "url" -> s"jdbc:sqlserver://$serverName:$portNumber;databaseName=$databaseName",
+      "dbtable" -> discrepancyTable,
+      "user" -> user,
+      "password" -> password
+    )
+
+    try {
+      val deltaDf = loadDeltaData(spark, deltaPath, lastReconciliationTime)
+      println("Delta Lake data loaded and filtered successfully.")
+
+      val sqlDf = loadSqlData(spark, readOptions, lastReconciliationTime)
+      println("SQL Server data loaded and filtered successfully.")
+
+      identifyAndWriteDiscrepancies(deltaDf, sqlDf, writeOptions)
+
+      println("Differences saved successfully to SQL Server.")
+    } catch {
+      case e: Exception =>
+        println(s"An error occurred: ${e.getMessage}")
+        e.printStackTrace()
+    }
+  }
+}
