@@ -92,3 +92,10 @@ object DataReconciliation {
     }
   }
 }
+
+////
+
+ // Rename columns to lowercase
+    df.columns.foreach { columnName =>
+      df = df.withColumnRenamed(columnName, columnName.toLowerCase)
+    }
