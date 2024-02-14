@@ -1,0 +1,83 @@
+import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
+import org.apache.spark.sql.functions._
+
+val spark = SparkSession.builder()
+  .appName("DataLoadVerification")
+  .getOrCreate()
+
+def logDataLoadDetails(df: DataFrame, destinationTable: String, dataType: String): Unit = {
+  // Calculate Expected Count
+  val expectedCount = df.count()
+
+  // Calculate Actual Count using DataFrame API
+  val actualCountDF = spark.read
+    .format("jdbc")
+    .option("url", jdbcUrl)
+    .option("dbtable", destinationTable)
+    .option("user", "<your_user>")
+    .option("password", "<your_password>")
+    .load()
+
+  val actualCount = actualCountDF.count()
+
+  // Calculate Difference
+  val diffCount = expectedCount - actualCount
+
+  // Create DataFrame for DataLoadVerificationTable
+  val verificationDetailsDF = Seq(
+    (java.sql.Timestamp.valueOf(java.time.LocalDateTime.now()), dataType, expectedCount, actualCount, diffCount)
+  ).toDF("BatchInsertTime", "DataType", "ExpectedCount", "ActualCount", "DiffCount")
+
+  // Write DataLoadVerification Details
+  verificationDetailsDF.write
+    .format("jdbc")
+    .option("url", jdbcUrl)
+    .option("dbtable", "DataLoadVerificationTable")
+    .option("user", "<your_user>")
+    .option("password", "<your_password>")
+    .mode(SaveMode.Append)
+    .save()
+}
+def writeDifferencesToEventsTable(df: DataFrame, destinationTable: String, primaryKeyColumns: Array[String]): Unit = {
+  // Load Destination DataFrame
+  val destinationDF = spark.read
+    .format("jdbc")
+    .option("url", jdbcUrl)
+    .option("dbtable", destinationTable)
+    .option("user", "<your_user>")
+    .option("password", "<your_password>")
+    .load()
+
+  // Find Differences
+  val differencesDF = df.join(destinationDF, primaryKeyColumns, "left_anti")
+
+  // Log Differences to EventsTable
+  differencesDF.write
+    .format("jdbc")
+    .option("url", jdbcUrl)
+    .option("dbtable", "EventsTable")
+    .option("user", "<your_user>")
+    .option("password", "<your_password>")
+    .mode(SaveMode.Append)
+    .save()
+}
+
+
+CREATE TABLE DataLoadVerificationTable (
+    ID INT IDENTITY(1,1) PRIMARY KEY,
+    BatchInsertTime DATETIME NOT NULL,
+    DataType NVARCHAR(255) NOT NULL,
+    ExpectedCount BIGINT NOT NULL,
+    ActualCount BIGINT NOT NULL,
+    DiffCount BIGINT NOT NULL
+);
+
+
+CREATE TABLE EventsTable (
+    ID INT IDENTITY(1,1) PRIMARY KEY,
+    BatchInsertTime DATETIME NOT NULL,
+    DataType NVARCHAR(255) NOT NULL,
+    MissingKeys NVARCHAR(MAX) NOT NULL
+);
+
+
