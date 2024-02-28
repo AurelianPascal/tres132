@@ -1,0 +1,94 @@
+import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.functions._
+
+object DataIntegrityUtils {
+
+  def getSparkSession(appName: String): SparkSession = {
+    SparkSession.builder().appName(appName).getOrCreate()
+  }
+
+  // Updated to exclude "tempCol1" and "tempCol2" from checksum calculation
+  def calculateChecksum(df: DataFrame): DataFrame = {
+    // Filter out the columns to exclude from the checksum
+    val columnsToInclude = df.columns.filterNot(colName => colName == "tempCol1" || colName == "tempCol2")
+
+    // Concatenate the values of the included columns for each row
+    val concatCols = concat_ws("|", columnsToInclude.map(col): _*)
+
+    // Calculate checksum using Spark's hash function
+    df.withColumn("checksum", abs(hash(concatCols)))
+  }
+
+  def saveToSqlServer(df: DataFrame, url: String, dbTable: String, user: String, password: String): Unit = {
+    df.write
+      .format("jdbc")
+      .option("url", url)
+      .option("dbtable", dbTable)
+      .option("user", user)
+      .option("password", password)
+      .mode("append")
+      .save()
+  }
+
+  def readFromSqlServer(url: String, dbTable: String, user: String, password: String, spark: SparkSession): DataFrame = {
+    spark.read
+      .format("jdbc")
+      .option("url", url)
+      .option("dbtable", dbTable)
+      .option("user", user)
+      .option("password", password)
+      .load()
+  }
+
+  def verifyChecksums(originalDF: DataFrame, recalculatedDF: DataFrame): Long = {
+    val verificationDF = originalDF.join(recalculatedDF, originalDF.columns.filterNot(_ == "checksum"), "inner")
+      .withColumn("checksum_match", originalDF("checksum") === recalculatedDF("checksum"))
+
+    verificationDF.filter(not(col("checksum_match"))).count()
+  }
+}
+
+
+import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.{DateType, TimestampType}
+
+object DataIntegrityUtils {
+
+  def getSparkSession(appName: String): SparkSession = {
+    SparkSession.builder().appName(appName).getOrCreate()
+  }
+
+  /**
+    * Calculates a checksum for each row by concatenating all column values, excluding specified columns and optionally excluding date columns.
+    *
+    * @param df The DataFrame to calculate checksums for.
+    * @param excludeDates Whether to exclude date and timestamp columns from the checksum calculation.
+    * @return DataFrame with an additional "checksum" column containing the calculated checksums.
+    */
+  def calculateChecksum(df: DataFrame, excludeDates: Boolean = false): DataFrame = {
+    // Identify columns to be excluded by name
+    val columnsToExcludeByName = Seq("tempCol1", "tempCol2")
+    
+    // Optionally identify date and timestamp columns to be excluded
+    val columnsToExcludeByType = if (excludeDates) {
+      df.schema.fields.filter(field => field.dataType == DateType || field.dataType == TimestampType).map(_.name)
+    } else {
+      Array[String]()
+    }
+
+    // Combine both criteria for excluded columns
+    val excludedColumns = columnsToExcludeByName ++ columnsToExcludeByType
+
+    // Filter out the excluded columns
+    val columnsToInclude = df.columns.filterNot(excludedColumns.contains)
+
+    // Concatenate the values of the included columns for each row
+    val concatCols = concat_ws("|", columnsToInclude.map(col): _*)
+
+    // Calculate checksum using Spark's hash function
+    df.withColumn("checksum", abs(hash(concatCols)))
+  }
+
+  // The rest of the utility functions (saveToSqlServer, readFromSqlServer, verifyChecksums) remain unchanged
+}
