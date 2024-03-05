@@ -1,0 +1,59 @@
+// Import necessary libraries
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions.lit
+
+// Define method to filter DataFrame columns based on prefixes
+def filterColumnsStartsWith(df: DataFrame, columnsPrefixes: Seq[String], include: Boolean = true): DataFrame = {
+  val filteredColumns = if (include) {
+    df.columns.filter(col => columnsPrefixes.exists(prefix => col.startsWith(prefix)))
+  } else {
+    df.columns.filterNot(col => columnsPrefixes.exists(prefix => col.startsWith(prefix)))
+  }
+  df.select(filteredColumns.head, filteredColumns.tail: _*)
+}
+
+// Define method to align DataFrames schemas, ensuring allColumns are lowercase and unique
+def alignDataFramesSchemas(dfs: Seq[DataFrame]): Seq[DataFrame] = {
+  val allColumns = dfs.flatMap(_.columns.map(_.toLowerCase)).toSet.toList.sorted
+
+  def addMissingColumns(df: DataFrame, allColumns: List[String]): DataFrame = {
+    val currentColumns = df.columns.map(_.toLowerCase).toSet
+    val missingColumns = allColumns.filterNot(currentColumns.contains)
+    val dfWithAllColumns = missingColumns.foldLeft(df)((currentDf, colName) => currentDf.withColumn(colName, lit(null).cast("string")))
+    // Ensure the select uses the existing DataFrame columns in lowercase for the mapping
+    dfWithAllColumns.select(allColumns.map(colName => dfWithAllColumns.col(colName.toLowerCase)): _*)
+  }
+  
+  dfs.map(df => addMissingColumns(df, allColumns))
+}
+
+// Read Delta tables into DataFrames
+val bondDF = spark.read.format("delta").load("/path/to/bond_delta_table")
+val equityDF = spark.read.format("delta").load("/path/to/equity_delta_table")
+val futureDF = spark.read.format("delta").load("/path/to/future_delta_table")
+
+// Apply filterColumnsStartsWith to the DataFrames
+val filteredBondDF = filterColumnsStartsWith(bondDF, Seq("bond"), include = true)
+val filteredEquityDF = filterColumnsStartsWith(equityDF, Seq("equity"), include = true)
+val filteredFutureDF = filterColumnsStartsWith(futureDF, Seq("future"), include = true)
+
+// Align the schemas of the filtered DataFrames
+val alignedDFs = alignDataFramesSchemas(Seq(filteredBondDF, filteredEquityDF, filteredFutureDF))
+
+// Optionally, show the result of one of the aligned DataFrames to verify the output
+alignedDFs.head.show()
+
+// SQL Server connection details
+val jdbcUrl = "jdbc:sqlserver://<your-server>.database.windows.net:1433;database=<your-database>"
+val dbTable = "<your-table-name>"
+val connectionProperties = new java.util.Properties()
+
+connectionProperties.setProperty("user", "<your-username>")
+connectionProperties.setProperty("password", "<your-password>")
+// Ensure you have the JDBC driver for SQL Server available in your cluster
+connectionProperties.setProperty("driver", "com.microsoft.sqlserver.jdbc.SQLServerDriver")
+
+// Write the filteredBondDF DataFrame to SQL Server
+filteredBondDF.write
+  .mode("append") // Or use "overwrite" if you want to replace the table
+  .jdbc(jdbcUrl, dbTable, connectionProperties)
