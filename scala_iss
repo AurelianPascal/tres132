@@ -57,3 +57,18 @@ connectionProperties.setProperty("driver", "com.microsoft.sqlserver.jdbc.SQLServ
 filteredBondDF.write
   .mode("append") // Or use "overwrite" if you want to replace the table
   .jdbc(jdbcUrl, dbTable, connectionProperties)
+
+
+
+
+
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions.col
+
+def toLowerCaseDF(df: DataFrame): DataFrame = {
+  // Map each column name to its lowercase equivalent
+  val lowerCaseColumns = df.columns.map(name => col(name).alias(name.toLowerCase))
+  // Select these columns in the original DataFrame
+  df.select(lowerCaseColumns: _*)
+}
+
