@@ -1,0 +1,41 @@
+HashMap
+How does a HashMap work in Java? Describe its internal working.
+
+This question assesses the candidate's understanding of the underlying data structure used by HashMap and how it handles hashing, collisions, and resizing.
+Can you explain the difference between HashMap and ConcurrentHashMap? Provide examples of scenarios where you would use one over the other.
+
+This tests knowledge of thread-safe operations and the candidate's ability to choose the appropriate data structure based on concurrency requirements.
+Discuss the impact of initial capacity and load factor on the performance of a HashMap.
+
+This question is aimed at evaluating the candidate's ability to optimize the performance of collections based on an understanding of their properties.
+Deadlock
+What is a deadlock in Java? Can you provide an example of how a deadlock can occur and how to prevent it?
+
+This question requires the candidate to explain deadlocks, identify potential causes, and demonstrate knowledge of techniques to avoid or resolve them.
+How would you detect and resolve deadlocks in a Java application?
+
+The candidate should discuss tools (like JConsole, VisualVM) and coding practices for detecting and resolving deadlocks, demonstrating their problem-solving skills in concurrency issues.
+Exceptions
+Explain the difference between checked and unchecked exceptions in Java. Why would you use one over the other?
+
+This question assesses the candidate's understanding of exception handling and their ability to make informed decisions on when to use checked versus unchecked exceptions.
+Can you describe best practices for exception handling in Java?
+
+Candidates should discuss strategies for writing robust and maintainable error handling code, including the use of custom exceptions, logging, and clean-up activities in finally blocks.
+Concurrency
+Explain the differences between the Runnable and Callable interfaces in Java concurrency. Give examples of when you would use each.
+
+This tests the candidate's knowledge of Java's concurrency APIs and their ability to choose the appropriate interface for tasks that may or may not return a result and may throw an exception.
+Discuss the purpose and use of the synchronized keyword and java.util.concurrent.locks.Lock. How do they differ and when would you use one over the other?
+
+The candidate should explain synchronization in Java, the differences between intrinsic locks (synchronized blocks/methods) and explicit locks (Lock instances), and scenarios where each is preferred.
+How do you ensure thread-safe access to a non-thread-safe collection in a concurrent application?
+
+This question evaluates the candidate's ability to apply concurrency controls to data structures that are not inherently thread-safe, ensuring data integrity in a concurrent environment.
+These questions are designed to probe the depth of a candidate's understanding and practical experience with complex Java programming concepts, focusing on their ability to solve real-world problems efficiently and effectively.
+
+
+
+
+
+
