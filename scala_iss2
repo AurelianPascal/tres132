@@ -1,0 +1,74 @@
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions._
+
+// Function to add a new field based on 'id', 'version', and 'datatype'
+def addNewField(df: DataFrame): DataFrame = {
+  // Adding a new column 'newField' that concatenates 'id', 'version', and 'datatype'
+  // with an underscore or any other separator as needed
+  df.withColumn("newField", concat(col("id"), lit("_"), col("version"), lit("_"), col("datatype")))
+}
+
+// Assuming you have a Spark session initiated as `spark`
+// Example usage
+val sparkSession = spark // Make sure you have a SparkSession available
+
+import sparkSession.implicits._
+
+// Example DataFrame creation
+val data = Seq(
+  (1, "v1", "type1"),
+  (2, "v2", "type2"),
+  (3, "v3", "type3")
+)
+
+val df = data.toDF("id", "version", "datatype")
+
+// Add the new field
+val resultDf = addNewField(df)
+
+// Show the result
+resultDf.show()
+
+///////////////
+
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.functions._
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.matchers.should.Matchers
+
+class DataFrameTest extends AnyFunSuite with Matchers {
+
+  // Initialize SparkSession for testing
+  val spark: SparkSession = SparkSession.builder()
+    .master("local")
+    .appName("DataFrameTest")
+    .getOrCreate()
+
+  import spark.implicits._
+
+  // Your addNewField function here for testing
+  def addNewField(df: org.apache.spark.sql.DataFrame): org.apache.spark.sql.DataFrame = {
+    df.withColumn("newField", concat(col("id"), lit("_"), col("version"), lit("_"), col("datatype")))
+  }
+
+  test("addNewField should correctly add a new column") {
+    // Create a test DataFrame
+    val data = Seq((1, "v1", "type1"), (2, "v2", "type2"))
+    val testDf = data.toDF("id", "version", "datatype")
+
+    // Apply the function to add a new field
+    val resultDf = addNewField(testDf)
+
+    // Expected DataFrame
+    val expectedData = Seq((1, "v1", "type1", "1_v1_type1"), (2, "v2", "type2", "2_v2_type2"))
+    val expectedDf = expectedData.toDF("id", "version", "datatype", "newField")
+
+    // Check if the result matches the expected output
+    assert(resultDf.collect() === expectedDf.collect())
+  }
+
+  // Make sure to stop SparkSession to release resources after tests
+  override def afterAll(): Unit = {
+    spark.stop()
+  }
+}
