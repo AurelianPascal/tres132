@@ -1,0 +1,88 @@
+import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.functions.{col, lit}
+import org.apache.spark.sql.types.StructType
+
+def alignDataFrameToSQLTable(spark: SparkSession, sqlTableName: String, df: DataFrame, jdbcUrl: String, connectionProperties: Properties): DataFrame = {
+  // Infer schema from SQL Server table by reading zero rows
+  val dbTable = s"(SELECT TOP 0 * FROM $sqlTableName) as subquery"
+  val sqlTableSchemaDf = spark.read.jdbc(jdbcUrl, dbTable, connectionProperties)
+  val sqlTableSchema: StructType = sqlTableSchemaDf.schema
+
+  // Align DataFrame to SQL table schema
+  val dfColumns = df.columns.toSet
+  val sqlColumns = sqlTableSchema.fields.map(_.name).toSet
+
+  // Columns to add to DataFrame (exist in SQL table but not in DataFrame)
+  val columnsToAdd = sqlColumns.diff(dfColumns).map(c => lit(null).cast(sqlTableSchema(c).dataType).alias(c))
+
+  // Columns to remove from DataFrame (exist in DataFrame but not in SQL table)
+  val columnsToSelect = dfColumns.intersect(sqlColumns).map(c => col(c))
+
+  // Apply transformations
+  val alignedDf = df.select(columnsToSelect.map(col): _*).selectExpr("*", columnsToAdd.toSeq: _*)
+
+  alignedDf
+}
+
+// Usage example
+val spark = SparkSession.builder.appName("DataFrameSQLAlignment").getOrCreate()
+val jdbcUrl = "jdbc:sqlserver://<your_server>:<port>;databaseName=<your_database>"
+val connectionProperties = new Properties()
+connectionProperties.setProperty("user", "<your_username>")
+connectionProperties.setProperty("password", "<your_password>")
+connectionProperties.setProperty("driver", "com.microsoft.sqlserver.jdbc.SQLServerDriver")
+
+// Assume `df` is your DataFrame
+val alignedDf = alignDataFrameToSQLTable(spark, "yourSQLTableName", df, jdbcUrl, connectionProperties)
+
+// Show result
+alignedDf.show()
+
+
+
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.DataFrame
+import java.util.Properties
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Assertions._
+import org.mockito.Mockito._
+import org.mockito.ArgumentMatchers._
+
+class DataFrameSQLAlignmentTest {
+
+  @Test
+  def testAlignDataFrameToSQLTable(): Unit = {
+    // Initialize SparkSession with Mockito mock
+    val spark = mock(classOf[SparkSession])
+    val df = mock(classOf[DataFrame])
+    val alignedDf = mock(classOf[DataFrame])
+
+    // Mocking the read operation to return a DataFrame with a specific schema
+    val jdbcUrl = "jdbc:sqlserver://<your_server>:<port>;databaseName=<your_database>"
+    val connectionProperties = new Properties()
+    connectionProperties.setProperty("user", "<your_username>")
+    connectionProperties.setProperty("password", "<your_password>")
+    connectionProperties.setProperty("driver", "com.microsoft.sqlserver.jdbc.SQLServerDriver")
+
+    // Assuming sqlTableSchemaDf represents the DataFrame that simulates the SQL table schema
+    val sqlTableSchemaDf = mock(classOf[DataFrame])
+
+    when(spark.read.jdbc(eqTo(jdbcUrl), anyString(), any(classOf[Properties]))).thenReturn(sqlTableSchemaDf)
+    
+    // Assume these are the schema adjustments your function would make
+    when(df.columns).thenReturn(Array("existingColumn"))
+    when(sqlTableSchemaDf.schema).thenReturn(StructType(Array(StructField("existingColumn", StringType, true), StructField("newColumn", StringType, true))))
+    when(df.select("existingColumn")).thenReturn(df) // Mock select to return some DataFrame, for simplicity
+    when(df.selectExpr("*", "null as newColumn")).thenReturn(alignedDf) // Mock transformation
+
+    // Actual function call
+    val result = alignDataFrameToSQLTable(spark, "yourSQLTableName", df, jdbcUrl, connectionProperties)
+
+    // Verify the result
+    assertEquals(alignedDf, result)
+    
+    // Verify interactions - as per your logic
+    verify(df).select("existingColumn") // Verify that select was called with correct columns
+    verify(df).selectExpr("*", "null as newColumn") // Verify that transformation was applied correctly
+  }
+}
