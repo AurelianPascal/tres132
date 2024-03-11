@@ -86,3 +86,54 @@ class DataFrameSQLAlignmentTest {
     verify(df).selectExpr("*", "null as newColumn") // Verify that transformation was applied correctly
   }
 }
+
+
+//////////
+
+import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.functions.{col, lit}
+import org.apache.spark.sql.types.StructType
+
+def alignDataFrameToSQLTable(spark: SparkSession, sqlTableName: String, df: DataFrame, jdbcUrl: String, readOptions: Map[String, String]): DataFrame = {
+  // Define the SQL query for schema inference (selecting zero rows)
+  val query = s"(SELECT TOP 0 * FROM $sqlTableName) as subquery"
+  val options = readOptions + ("url" -> jdbcUrl) + ("dbtable" -> query)
+  
+  // Use Spark's DataFrameReader with format "jdbc" to infer schema
+  val sqlTableSchemaDf = spark.read.format("jdbc").options(options).load()
+  val sqlTableSchema: StructType = sqlTableSchemaDf.schema
+
+  // Align DataFrame to SQL table schema
+  val dfColumns = df.columns.toSet
+  val sqlColumns = sqlTableSchema.fields.map(_.name).toSet
+
+  // Columns to add to DataFrame (exist in SQL table but not in DataFrame)
+  val columnsToAdd = sqlColumns.diff(dfColumns).map(c => 
+    lit(null).cast(sqlTableSchema(c).dataType).alias(c)
+  )
+
+  // Columns to remove from DataFrame (exist in DataFrame but not in SQL table)
+  val columnsToSelect = dfColumns.intersect(sqlColumns).map(c => col(c))
+
+  // Apply transformations
+  val alignedDf = df.select(columnsToSelect.map(col): _*).selectExpr("*", columnsToAdd.toSeq: _*)
+
+  alignedDf
+}
+
+// Usage example
+val spark = SparkSession.builder.appName("DataFrameSQLAlignment").getOrCreate()
+val jdbcUrl = "jdbc:sqlserver://<your_server>:<port>;databaseName=<your_database>"
+val readOptions = Map(
+  "user" -> "<your_username>",
+  "password" -> "<your_password>",
+  "driver" -> "com.microsoft.sqlserver.jdbc.SQLServerDriver"
+)
+
+// Assume `df` is your DataFrame
+val alignedDf = alignDataFrameToSQLTable(spark, "yourSQLTableName", df, jdbcUrl, readOptions)
+
+// Show result
+alignedDf.show()
+
+
