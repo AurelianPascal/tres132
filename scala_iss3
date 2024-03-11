@@ -137,3 +137,51 @@ val alignedDf = alignDataFrameToSQLTable(spark, "yourSQLTableName", df, jdbcUrl,
 alignedDf.show()
 
 
+////
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.DataFrame
+import java.util.Properties
+
+/**
+ * Loads column mappings from a SQL table named "my_mapping_table" using JDBC.
+ *
+ * @param spark The Spark session.
+ * @param jdbcUrl The JDBC URL for the database connection.
+ * @param properties JDBC connection properties including user and password.
+ * @return A Map where keys are Delta column names (map_from_delta) and values are SQL column names (map_to_sql).
+ */
+def loadColumnMappingsFromSQL(spark: SparkSession, jdbcUrl: String, properties: Properties): Map[String, String] = {
+  // Define the query to select only the rows with datatype='ISSUE'
+  val query = "(SELECT map_from_delta, map_to_sql FROM my_mapping_table WHERE datatype = 'ISSUE') AS issue_mappings"
+
+  // Read the mapping table using JDBC
+  val mappingDf = spark.read
+    .jdbc(jdbcUrl, query, properties)
+
+  // Collect the mappings into a Map
+  val mappings = mappingDf.collect()
+    .map(row => row.getAs[String]("map_from_delta") -> row.getAs[String]("map_to_sql"))
+    .toMap
+
+  mappings
+}
+
+// Usage example
+val spark = SparkSession.builder.appName("DataFrameSchemaAlignment").getOrCreate()
+val jdbcUrl = "jdbc:sqlserver://<your_server>:<port>;databaseName=<your_database>"
+val properties = new Properties()
+properties.setProperty("user", "<your_username>")
+properties.setProperty("password", "<your_password>")
+properties.setProperty("driver", "com.microsoft.sqlserver.jdbc.SQLServerDriver")
+
+// Load column mappings from the SQL table "my_mapping_table"
+val columnMappings = loadColumnMappingsFromSQL(spark, jdbcUrl, properties)
+
+// Assuming `df` is your DataFrame representing the Delta table, and you have defined `alignDataFrameWithMappings` as before
+// val alignedDf = alignDataFrameWithMappings(spark, df, columnMappings)
+
+// Show result
+// alignedDf.show()
+
+
+
