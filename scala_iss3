@@ -184,4 +184,34 @@ val columnMappings = loadColumnMappingsFromSQL(spark, jdbcUrl, properties)
 // alignedDf.show()
 
 
+/**
+ * Aligns a DataFrame to match a specified schema, using column mappings.
+ * 
+ * @param spark The Spark session.
+ * @param df The DataFrame to align.
+ * @param columnMappings A map where keys are Delta table column names and values are SQL table column names.
+ * @return A DataFrame aligned to the schema defined by columnMappings, with columns added or dropped as necessary.
+ */
+def alignDataFrameWithMappings(spark: SparkSession, df: DataFrame, columnMappings: Map[String, String]): DataFrame = {
+  // Generate the SQL table schema based on the mappings provided
+  val sqlTableSchema = StructType(columnMappings.values.toList.distinct.map(StructField(_, StringType, true)))
+
+  // Align DataFrame to the schema defined by column mappings
+  // Add missing columns (present in SQL schema but not in DataFrame)
+  val columnsToAdd = sqlTableSchema.fields
+    .filterNot(field => df.columns.contains(field.name) || columnMappings.values.toList.contains(field.name))
+    .map(field => lit(null).cast(StringType).alias(field.name))
+
+  // Select and rename columns as necessary to match the SQL table column names
+  val columnsToSelect = df.columns
+    .flatMap(deltaName => columnMappings.get(deltaName).orElse(Some(deltaName)).map(sqlName => col(deltaName).alias(sqlName)))
+
+  // Apply transformations
+  val alignedDf = df.select(columnsToSelect ++ columnsToAdd: _*)
+
+  alignedDf
+}
+
+
+
 
