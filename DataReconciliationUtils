@@ -1,0 +1,141 @@
+import org.apache.spark.sql.{SparkSession, DataFrame}
+import org.apache.spark.sql.functions._
+
+class DataReconciliationUtils(spark: SparkSession) {
+
+  // Load data from Delta Lake
+  def loadDeltaData(deltaPath: String, lastReconciliationTime: String): DataFrame = {
+    println("Loading data from Delta Lake...")
+    try {
+      val df = spark.read.format("delta").load(deltaPath)
+        .select("id", "event_version", "last_updated_time")
+        .filter(s"last_updated_time >= '$lastReconciliationTime'")
+      println("Data successfully loaded from Delta Lake.")
+      df
+    } catch {
+      case e: Exception =>
+        println(s"Error loading data from Delta Lake: ${e.getMessage}")
+        spark.emptyDataFrame
+    }
+  }
+
+  // Load data from SQL Server
+  def loadSqlData(readOptions: Map[String, String], lastReconciliationTime: String): DataFrame = {
+    println("Loading data from SQL Server...")
+    try {
+      val df = spark.read.format("com.microsoft.sqlserver.jdbc.spark")
+        .options(readOptions)
+        .load()
+        .select("id", "event_version", "last_updated_time")
+        .filter(s"last_updated_time >= '$lastReconciliationTime'")
+      println("Data successfully loaded from SQL Server.")
+      df
+    } catch {
+      case e: Exception =>
+        println(s"Error loading data from SQL Server: ${e.getMessage}")
+        spark.emptyDataFrame
+    }
+  }
+
+  // Write data to SQL Server
+  def writeDataToSql(df: DataFrame, writeOptions: Map[String, String]): Unit = {
+    println("Writing data to SQL Server...")
+    try {
+      df.write.format("com.microsoft.sqlserver.jdbc.spark").options(writeOptions).mode("append").save()
+      println("Data successfully written to SQL Server.")
+    } catch {
+      case e: Exception =>
+        println(s"Error writing data to SQL Server: ${e.getMessage}")
+    }
+  }
+
+  // Identify and write discrepancies
+  def identifyAndWriteDiscrepancies(deltaDf: DataFrame, sqlDf: DataFrame, writeOptions: Map[String, String]): Unit = {
+    println("Identifying discrepancies...")
+    if (deltaDf.isEmpty || sqlDf.isEmpty) {
+      println("One of the DataFrames is empty, skipping discrepancies identification.")
+      return
+    }
+    try {
+      val diffsToSave = deltaDf.join(sqlDf, Seq("id", "event_version"), "full_outer")
+        .where(deltaDf("id").isNull || sqlDf("id").isNull)
+        .select(deltaDf("id"), deltaDf("event_version"), lit("example_datatype").as("datatype"))
+        .withColumn("created_at", current_timestamp())
+
+      if (diffsToSave.isEmpty) {
+        println("No discrepancies found.")
+      } else {
+        writeDataToSql(diffsToSave, writeOptions)
+        println("Discrepancies successfully identified and saved.")
+      }
+    } catch {
+      case e: Exception =>
+        println(s"Error identifying or writing discrepancies: ${e.getMessage}")
+    }
+  }
+
+}
+
+// Example usage within Databricks notebook
+// Assuming implicit Spark session is available as 'spark'
+val reconciliationUtils = new DataReconciliationUtils(spark)
+val deltaPath = "dbfs:/path/to/your/delta/table"
+val lastReconciliationTime = "2023-01-01T00:00:00"
+val readOptions = Map(/* Your SQL Server read options here */)
+val writeOptions = Map(/* Your SQL Server write options here */)
+
+try {
+  val deltaDf = reconciliationUtils.loadDeltaData(deltaPath, lastReconciliationTime)
+  val sqlDf = reconciliationUtils.loadSqlData(readOptions, lastReconciliationTime)
+  reconciliationUtils.identifyAndWriteDiscrepancies(deltaDf, sqlDf, writeOptions)
+  println("Process completed successfully.")
+} catch {
+  case e: Exception => println(s"Unexpected error: ${e.getMessage}")
+}
+
+
+#########
+
+CREATE TABLE reconciliation_discrepancies (
+    id VARCHAR(255), -- Adjust the data type based on your actual ID column
+    event_version INT,
+    datatype VARCHAR(255),
+    created_at DATETIME,
+    PRIMARY KEY (id, event_version, datatype)
+);
+
+#######
+
+import org.apache.spark.sql.SparkSession
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.matchers.should.Matchers
+import org.scalatestplus.mockito.MockitoSugar
+import org.mockito.Mockito._
+import org.apache.spark.sql.DataFrame
+
+class DataReconciliationUtilsTest extends AnyFunSuite with Matchers with MockitoSugar {
+
+  val mockSparkSession: SparkSession = mock[SparkSession]
+  val mockDataFrame: DataFrame = mock[DataFrame]
+
+  test("loadDeltaData returns DataFrame with correct filters") {
+    // Arrange
+    val deltaPath = "dbfs:/mock/delta/table"
+    val lastReconciliationTime = "2023-01-01T00:00:00"
+    val utils = new DataReconciliationUtils(mockSparkSession)
+
+    when(mockSparkSession.read.format("delta").load(deltaPath)).thenReturn(mockDataFrame)
+    when(mockDataFrame.select("id", "event_version", "last_updated_time")).thenReturn(mockDataFrame)
+    when(mockDataFrame.filter(s"last_updated_time >= '$lastReconciliationTime'")).thenReturn(mockDataFrame)
+
+    // Act
+    val result = utils.loadDeltaData(deltaPath, lastReconciliationTime)
+
+    // Assert
+    result shouldBe mockDataFrame
+    verify(mockDataFrame).select("id", "event_version", "last_updated_time")
+    verify(mockDataFrame).filter(s"last_updated_time >= '$lastReconciliationTime'")
+  }
+}
+
+
