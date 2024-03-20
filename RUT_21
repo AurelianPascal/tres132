@@ -1,0 +1,70 @@
+import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.functions._
+
+// Load a DataFrame from a Delta table and convert column names to lowercase
+def loadDataFrame(spark: SparkSession, tableName: String): DataFrame = {
+  println(s"Loading DataFrame from Delta table: $tableName")
+  val df = spark.read.table(tableName)
+  df.columns.foldLeft(df)((currentDf, colName) => currentDf.withColumnRenamed(colName, colName.toLowerCase))
+}
+
+def filterAndSelect(df: DataFrame, selectColumns: Array[String], filterDate: String, dateColumn: String): DataFrame = {
+  println(s"Filtering and selecting columns from DataFrame")
+  df.select(selectColumns.map(col): _*).filter(col(dateColumn) === filterDate)
+}
+
+def saveAsDeltaTable(df: DataFrame, tableName: String): Unit = {
+  println(s"Saving DataFrame as Delta table: $tableName")
+  df.write.format("delta").mode("overwrite").saveAsTable(tableName)
+}
+
+// Updated method to accept writeOptions as a parameter
+def writeToSqlServer(df: DataFrame, writeOptions: Map[String, String]): Unit = {
+  println("Writing DataFrame to SQL Server")
+  df.write
+    .format("jdbc")
+    .options(writeOptions)
+    .mode("overwrite")
+    .save()
+}
+
+def runReconciliation(spark: SparkSession, tableName: String, selectColumns: Array[String],
+                      filterDate: String, dateColumn: String, dataType: String, range: String, comparisonTableName: String,
+                      serverName: String, databaseName: String, sqlServerTable: String, user: String, password: String): Unit = {
+  import spark.implicits._
+
+  println("Starting reconciliation process")
+  val df = loadDataFrame(spark, tableName)
+  val filteredDf = filterAndSelect(df, selectColumns, filterDate, dateColumn)
+  val stageTableName = s"RECON_${dataType}_${range}_STAGE"
+
+  saveAsDeltaTable(filteredDf, stageTableName)
+
+  val breaksTableName = s"RECON_${dataType}_${range}_BREAKS"
+  val query = s"""
+    SELECT * FROM $stageTableName WHERE NOT EXISTS (
+      SELECT 1 FROM $comparisonTableName WHERE
+      $comparisonTableName.uuid = $stageTableName.uuid AND
+      $comparisonTableName.event_version = $stageTableName.event_version AND
+      $comparisonTableName.event_lastupdated = $stageTableName.event_lastupdated
+    )
+  """
+  println("Querying for breaks")
+  val breaksDf = spark.sql(query)
+
+  saveAsDeltaTable(breaksDf, breaksTableName)
+
+  // Prepare writeOptions map
+  val jdbcUrl = s"jdbc:sqlserver://$serverName.database.windows.net:1433;database=$databaseName;encrypt=true;trustServerCertificate=false;hostNameInCertificate=*.database.windows.net;loginTimeout=30;"
+  val writeOptions = Map(
+    "url" -> jdbcUrl,
+    "dbtable" -> sqlServerTable,
+    "user" -> user,
+    "password" -> password,
+    "driver" -> "com.microsoft.sqlserver.jdbc.SQLServerDriver"
+  )
+
+  // Use the updated writeToSqlServer method with writeOptions as a parameter
+  writeToSqlServer(breaksDf, writeOptions)
+  println("Reconciliation process completed")
+}
