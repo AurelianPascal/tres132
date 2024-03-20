@@ -1,0 +1,254 @@
+import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.functions._
+
+object ReconciliationUtil {
+
+  // Load a DataFrame from a Delta table and convert column names to lowercase
+  def loadDataFrame(spark: SparkSession, tableName: String): DataFrame = {
+    val df = spark.read.table(tableName)
+    df.columns.foldLeft(df)((currentDf, colName) => currentDf.withColumnRenamed(colName, colName.toLowerCase))
+  }
+
+  def filterAndSelect(df: DataFrame, selectColumns: Array[String], filterDate: String, dateColumn: String): DataFrame = {
+    df.select(selectColumns.map(col): _*).filter(col(dateColumn) === filterDate)
+  }
+
+  def saveAsDeltaTable(df: DataFrame, tableName: String): Unit = {
+    df.write.format("delta").mode("overwrite").saveAsTable(tableName)
+  }
+
+  // Updated method to accept writeOptions as a parameter
+  def writeToSqlServer(df: DataFrame, writeOptions: Map[String, String]): Unit = {
+    df.write
+      .format("jdbc")
+      .options(writeOptions)
+      .mode("overwrite")
+      .save()
+  }
+
+  def runReconciliation(spark: SparkSession, tableName: String, selectColumns: Array[String],
+                        filterDate: String, dateColumn: String, dataType: String, range: String, comparisonTableName: String,
+                        serverName: String, databaseName: String, sqlServerTable: String, user: String, password: String): Unit = {
+    import spark.implicits._
+
+    val df = loadDataFrame(spark, tableName)
+    val filteredDf = filterAndSelect(df, selectColumns, filterDate, dateColumn)
+    val stageTableName = s"RECON_${dataType}_${range}_STAGE"
+
+    saveAsDeltaTable(filteredDf, stageTableName)
+
+    val breaksTableName = s"RECON_${dataType}_${range}_BREAKS"
+    val query = s"""
+      SELECT * FROM $stageTableName WHERE NOT EXISTS (
+        SELECT 1 FROM $comparisonTableName WHERE
+        $comparisonTableName.uuid = $stageTableName.uuid AND
+        $comparisonTableName.event_version = $stageTableName.event_version AND
+        $comparisonTableName.event_lastupdated = $stageTableName.event_lastupdated
+      )
+    """
+    val breaksDf = spark.sql(query)
+
+    saveAsDeltaTable(breaksDf, breaksTableName)
+
+    // Prepare writeOptions map
+    val jdbcUrl = s"jdbc:sqlserver://$serverName.database.windows.net:1433;database=$databaseName;encrypt=true;trustServerCertificate=false;hostNameInCertificate=*.database.windows.net;loginTimeout=30;"
+    val writeOptions = Map(
+      "url" -> jdbcUrl,
+      "dbtable" -> sqlServerTable,
+      "user" -> user,
+      "password" -> password,
+      "driver" -> "com.microsoft.sqlserver.jdbc.SQLServerDriver"
+    )
+
+    // Use the updated writeToSqlServer method with writeOptions as a parameter
+    writeToSqlServer(breaksDf, writeOptions)
+  }
+}
+
+########### TEST1 ######
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.types._
+import org.scalatest._
+import com.holdenkarau.spark.testing.DataFrameSuiteBase
+import org.apache.spark.sql.functions._
+
+class ReconciliationUtilTest extends FunSuite with DataFrameSuiteBase {
+
+  import spark.implicits._
+
+  test("loadDataFrame: should load a DataFrame and convert column names to lowercase") {
+    // Simulate a table in Spark's memory for testing
+    val tableName = "testTable"
+    val data = Seq((1, "A"), (2, "B"))
+    val columns = Seq("ID", "NAME")
+    val df = data.toDF(columns: _*)
+    df.write.mode("overwrite").saveAsTable(tableName)
+
+    val loadedDf = ReconciliationUtil.loadDataFrame(spark, tableName)
+    assert(loadedDf.columns.sameElements(Array("id", "name")), "Column names should be lowercase")
+  }
+
+  test("filterAndSelect: should filter and select specified columns") {
+    val data = Seq(
+      ("1", "2023-01-01", "A"),
+      ("2", "2023-01-02", "B")
+    )
+    val df = data.toDF("id", "date", "name")
+    val resultDf = ReconciliationUtil.filterAndSelect(df, Array("id", "name"), "2023-01-01", "date")
+
+    assert(resultDf.count() == 1)
+    assert(resultDf.columns.length == 2)
+    assert(resultDf.columns.contains("id") && resultDf.columns.contains("name"))
+  }
+
+  test("saveAsDeltaTable: should save DataFrame as Delta table") {
+    val data = Seq((1, "A"), (2, "B"))
+    val df = data.toDF("id", "name")
+    
+    // Note: This will actually write to the file system in a test directory
+    ReconciliationUtil.saveAsDeltaTable(df, "deltaTableTest")
+
+    val loadedDf = spark.read.format("delta").load("spark-warehouse/deltaTableTest")
+    assert(loadedDf.count() == df.count())
+  }
+
+  test("writeToSqlServer: should prepare writeOptions and write to SQL Server") {
+    val data = Seq((1, "A"), (2, "B"))
+    val df = data.toDF("id", "name")
+    val writeOptions = Map(
+      "url" -> "jdbc:sqlserver://localhost;databaseName=testDb",
+      "dbtable" -> "testTable",
+      "user" -> "user",
+      "password" -> "password",
+      "driver" -> "com.microsoft.sqlserver.jdbc.SQLServerDriver"
+    )
+    
+    // This test should mock the database write operation as it requires an actual database connection
+    // ReconciliationUtil.writeToSqlServer(df, writeOptions)
+    // Assert that writeOptions are correctly passed and used, possibly by inspecting logs or using a mock framework
+  }
+
+  // Add more tests for runReconciliation and other utility methods as needed
+}
+
+
+###test2 ###
+
+// File: src/test/scala/ReconciliationUtilTest.scala
+
+import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.scalatest._
+import com.holdenkarau.spark.testing.DataFrameSuiteBase
+
+class ReconciliationUtilTest extends FunSuite with DataFrameSuiteBase {
+
+  import spark.implicits._
+
+  test("loadDataFrame: should load a DataFrame and convert column names to lowercase") {
+    // Given
+    val spark = SparkSession.builder().appName("ReconciliationUtilTest").master("local").getOrCreate()
+    import spark.implicits._
+    val data = Seq((1, "Alice"), (2, "Bob"))
+    val df = data.toDF("ID", "NAME")
+    df.createOrReplaceTempView("testTable")
+
+    // When
+    val loadedDf = ReconciliationUtil.loadDataFrame(spark, "testTable")
+
+    // Then
+    assert(loadedDf.columns.contains("id"))
+    assert(loadedDf.columns.contains("name"))
+    assert(!loadedDf.columns.contains("ID"))
+    assert(!loadedDf.columns.contains("NAME"))
+  }
+
+  test("filterAndSelect: should filter and select specified columns") {
+    // Given
+    val schema = StructType(Array(
+      StructField("id", StringType, nullable = false),
+      StructField("date", StringType, nullable = false),
+      StructField("name", StringType, nullable = false)
+    ))
+    val data = Seq(
+      Row("1", "2023-01-01", "Alice"),
+      Row("2", "2023-01-02", "Bob")
+    )
+    val rdd = spark.sparkContext.parallelize(data)
+    val df = spark.createDataFrame(rdd, schema)
+
+    // When
+    val resultDf = ReconciliationUtil.filterAndSelect(df, Array("id", "name"), "2023-01-01", "date")
+
+    // Then
+    assert(resultDf.count() == 1)
+    assert(resultDf.columns.contains("id"))
+    assert(resultDf.columns.contains("name"))
+    assert(!resultDf.columns.contains("date"))
+  }
+
+  test("saveAsDeltaTable: should save DataFrame as Delta table") {
+    // Given
+    val data = Seq((1, "Alice"), (2, "Bob"))
+    val df = data.toDF("id", "name")
+
+    // This test is illustrative; in a real scenario, you'd assert the existence of the table in Delta Lake
+    // Since Delta Lake interactions require a Delta setup, here we outline what you'd typically do
+    intercept[AnalysisException] {
+      spark.read.format("delta").load("deltaTableTest")
+    }
+
+    // When
+    ReconciliationUtil.saveAsDeltaTable(df, "deltaTableTest")
+
+    // Then
+    // In a real test, you'd now read from "deltaTableTest" and verify its contents
+    // Here, we skip this step due to the setup required for Delta Lake tests
+  }
+
+  // Additional tests for writeToSqlServer and runReconciliation would go here
+  // They would likely involve mocking external dependencies and verifying interactions
+}
+
+
+
+
+
+
+
+##### SQL #####
+
+The Scala code snippet you've provided defines an object ReconciliationUtil with methods for: 
+loading data from a Delta table, filtering and selecting data, saving data to a Delta table, and writing data to a SQL Server database using JDBC. 
+To understand the SQL query that would be generated and executed as a result of this code, especially from the runReconciliation method, let's break down the main steps involved and the SQL they might produce.
+
+Loading and Filtering Data: The initial data load doesn't generate SQL directly since it reads from a Delta table into a DataFrame. 
+However, the filtering and selecting operation based on a date column would translate to SQL in the underlying Spark execution engine. 
+For example, if filterDate is '2023-01-01', dateColumn is 'event_date', and selectColumns includes columns like ['uuid', 'event_version', 'event_lastupdated'], the Spark engine might generate SQL similar to:
+
+sql
+Copy code
+SELECT uuid, event_version, event_lastupdated FROM tableName WHERE event_date = '2023-01-01'
+This is an abstracted form of SQL since Spark translates DataFrame operations into SQL or DataFrame API calls based on its optimization engine (Catalyst).
+
+Delta Table Operations: Operations like saveAsDeltaTable do not generate traditional SQL statements as they interact with Delta Lake's storage layer directly for reading and writing data.
+
+SQL for Finding Differences (Breaks): The most SQL-like operation occurs when finding differences between the staged data and a comparison table. 
+Given the placeholder names in the Scala code, an equivalent SQL query to find rows in stageTableName that don't exist in comparisonTableName based on matching uuid, event_version, and event_lastupdated would look something like this:
+
+SELECT * FROM RECON_dataType_range_STAGE WHERE NOT EXISTS (
+  SELECT 1 FROM comparisonTableName WHERE
+  comparisonTableName.uuid = RECON_dataType_range_STAGE.uuid AND
+  comparisonTableName.event_version = RECON_dataType_range_STAGE.event_version AND
+  comparisonTableName.event_lastupdated = RECON_dataType_range_STAGE.event_lastupdated
+)
+Replace dataType, range, and comparisonTableName with actual values to get the precise query.
+
+Writing to SQL Server: The writeToSqlServer method does not generate a readable SQL query for manual inspection. 
+Instead, it configures the DataFrame to be written to a SQL Server table using the JDBC connector. 
+The SQL operations in this case are insertions generated by Spark based on the DataFrame's structure and the target table schema. 
+The exact SQL statements depend on how Spark executes these insertions, often involving INSERT INTO table_name (column_list) VALUES (value_list) patterns, but batched and optimized for performance.
+
+This breakdown focuses on the SQL-like operations that Spark might internally perform or generate based on the DataFrame transformations and actions defined in the provided Scala code. 
+The exact SQL statements, especially for insertions into SQL Server, are abstracted away by Spark's JDBC DataFrameWriter interface.
+
