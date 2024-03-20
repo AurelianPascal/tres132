@@ -1,0 +1,113 @@
+import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.functions._
+
+object ReconciliationUtility {
+
+  def runReconciliation(spark: SparkSession, tablePath: String, selectColumns: Array[String], 
+                        filterDate: String, dateColumn: String, dataType: String, range: String, comparisonTable: String): Unit = {
+    import spark.implicits._
+
+    // Load Delta table
+    val df = spark.read.format("delta").load(tablePath)
+
+    // Select columns and filter based on provided date
+    val filteredDf = df.select(selectColumns.map(col): _*)
+                       .filter($"$dateColumn" === filterDate)
+
+    // Write DataFrame to SQL table with datatype and range label
+    val tableName = s"RECON_${dataType}_${range}_STAGE"
+    filteredDf.write
+              .format("parquet")
+              .mode("overwrite")
+              .saveAsTable(tableName)
+
+    // Check for discrepancies and write to BREAKS table
+    val breaksTableName = s"RECON_${dataType}_${range}_BREAKS"
+    val breaksDf = spark.sql(s"""
+      SELECT * 
+      FROM $tableName 
+      WHERE NOT EXISTS (
+        SELECT 1 FROM $comparisonTable 
+        WHERE $comparisonTable.uuid = $tableName.uuid 
+        AND $comparisonTable.event_version = $tableName.event_version 
+        AND $comparisonTable.event_lastupdated = $tableName.event_lastupdated)
+    """)
+
+    breaksDf.write
+            .format("parquet")
+            .mode("overwrite")
+            .saveAsTable(breaksTableName)
+  }
+  
+  // Example usage
+  def main(args: Array[String]): Unit = {
+    val spark = SparkSession.builder.appName("Reconciliation Utility").getOrCreate()
+
+    val tablePath = "dbfs:/path/to/your/delta/table"
+    val selectColumns = Array("uuid", "event_version", "event_lastupdated")
+    val filterDate = "2024-03-20" // Example date
+    val dateColumn = "event_lastupdated"
+    val dataType = "FUTURE"
+    val range = "DAILY" // Or "WEEKLY"
+    val comparisonTable = "yourComparisonTable" // Specify your comparison table
+
+    runReconciliation(spark, tablePath, selectColumns, filterDate, dateColumn, dataType, range, comparisonTable)
+  }
+}
+
+###
+
+import org.apache.spark.sql.SparkSession
+import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatestplus.mockito.MockitoSugar
+import org.mockito.Mockito._
+import org.mockito.ArgumentMatchers._
+
+class ReconciliationUtilityTest extends FunSuite with BeforeAndAfter with MockitoSugar {
+
+  var spark: SparkSession = _
+
+  before {
+    spark = SparkSession.builder()
+      .appName("Reconciliation Utility Test")
+      .master("local")
+      .getOrCreate()
+  }
+
+  after {
+    if (spark != null) {
+      spark.stop()
+    }
+  }
+
+  test("ReconciliationUtility runs successfully for FUTURE datatype and DAILY range") {
+    // Setup mock SparkSession and DataFrame
+    val mockSpark = mock[SparkSession]
+    val mockDataFrame = mock[org.apache.spark.sql.DataFrame]
+
+    when(mockSpark.read.format("delta").load(anyString())).thenReturn(mockDataFrame)
+    when(mockDataFrame.select(any())).thenReturn(mockDataFrame)
+    when(mockDataFrame.filter(anyString())).thenReturn(mockDataFrame)
+
+    // Assuming we have a method to write DataFrame to a table, we mock it to not perform any action
+    // This method should be part of your ReconciliationUtility or similar; adjust as necessary
+    doNothing().when(mockDataFrame).write.format("parquet").mode("overwrite").saveAsTable(anyString())
+
+    // Mock comparison logic as well
+    when(mockSpark.sql(anyString())).thenReturn(mockDataFrame)
+
+    // Execute the reconciliation with mocked Spark session
+    ReconciliationUtility.runReconciliation(
+      mockSpark, "mock/path", Array("uuid", "event_version", "event_lastupdated"), 
+      "2024-03-20", "event_lastupdated", "FUTURE", "DAILY", "mockComparisonTable"
+    )
+
+    // Verify the interactions
+    verify(mockSpark.read.format("delta")).load("mock/path")
+    verify(mockDataFrame).select("uuid", "event_version", "event_lastupdated")
+    verify(mockDataFrame).filter("event_lastupdated = '2024-03-20'")
+    verify(mockDataFrame, times(2)).write.format("parquet").mode("overwrite").saveAsTable(anyString()) // For both stage and breaks table
+  }
+
+  // Similar test for BOND and WEEKLY, omitted for brevity
+}
