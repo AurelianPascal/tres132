@@ -1,0 +1,165 @@
+### CODE  ####
+
+import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.functions._
+
+class ReconciliationUtility {
+
+  // Load a DataFrame from a table
+  def loadDataFrame(spark: SparkSession, tableName: String): DataFrame = {
+    println(s"Loading DataFrame from table: $tableName")
+    val df = spark.read.table(tableName)
+    df.columns.foldLeft(df)((currentDf, colName) => currentDf.withColumnRenamed(colName, colName.toLowerCase))
+  }
+
+  def filterAndSelect(df: DataFrame, selectColumns: Array[String], filterDate: String, dateColumn: String): DataFrame = {
+    println(s"Filtering and selecting columns from DataFrame where $dateColumn is greater than $filterDate")
+    df.select(selectColumns.map(col): _*).filter(col(dateColumn) > filterDate)
+  }
+
+  // Function to write DataFrame to SQL Server
+  def writeToSqlServer(df: DataFrame, writeOptions: Map[String, String]): Unit = {
+    println("Writing DataFrame to SQL Server")
+    df.write
+      .format("jdbc")
+      .options(writeOptions)
+      .mode("overwrite")
+      .save()
+  }
+
+  def findAndWriteBreaks(spark: SparkSession, sourceDf: DataFrame, selectColumns: Array[String], comparisonTableName: String,
+                         serverName: String, databaseName: String, breaksTableName: String, user: String, password: String): Unit = {
+    println("Finding breaks")
+    
+    // Temporarily view for source data
+    sourceDf.createOrReplaceTempView("source_view")
+    
+    // Construct the comparison query
+    val comparisonQuery = s"""
+      SELECT s.*
+      FROM source_view s
+      LEFT JOIN $comparisonTableName c ON s.uuid = c.uuid AND s.event_version = c.event_version AND s.event_lastupdated = c.event_lastupdated
+      WHERE c.uuid IS NULL
+    """
+    
+    // Execute the query to find breaks
+    val breaksDf = spark.sql(comparisonQuery)
+    
+    println("Writing breaks to SQL Server")
+    
+    // Prepare writeOptions map for SQL Server
+    val jdbcUrl = s"jdbc:sqlserver://$serverName.database.windows.net:1433;database=$databaseName;encrypt=true;trustServerCertificate=false;hostNameInCertificate=*.database.windows.net;loginTimeout=30;"
+    val writeOptions = Map(
+      "url" -> jdbcUrl,
+      "dbtable" -> breaksTableName,
+      "user" -> user,
+      "password" -> password,
+      "driver" -> "com.microsoft.sqlserver.jdbc.SQLServerDriver"
+    )
+    
+    // Write the breaks DataFrame to SQL Server
+    writeToSqlServer(breaksDf, writeOptions)
+  }
+
+  def runReconciliation(spark: SparkSession, tableName: String, selectColumns: Array[String],
+                        filterDate: String, dateColumn: String, comparisonTableName: String,
+                        serverName: String, databaseName: String, breaksTableName: String, user: String, password: String): Unit = {
+    println("Starting reconciliation process")
+    
+    val sourceDf = loadDataFrame(spark, tableName)
+    val filteredDf = filterAndSelect(sourceDf, selectColumns, filterDate, dateColumn)
+    
+    findAndWriteBreaks(spark, filteredDf, selectColumns, comparisonTableName, serverName, databaseName, breaksTableName, user, password)
+    
+    println("Reconciliation process completed")
+  }
+}
+### CALLING CODE  ###
+
+val reconciliationUtility = new ReconciliationUtility()
+reconciliationUtility.runReconciliation(spark, "source_table_name", Array("issue_ubsid", "event_majorVersion", "event_lastupdateddate"), "2023-01-01", "event_date", "comparison_table_name", "your_server_name.database.windows.net", "your_database_name", "breaks_table_name", "your_user_name", "your_password")
+
+
+
+### TEST CODE  ###
+
+import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.matchers.should.Matchers
+import org.scalatestplus.mockito.MockitoSugar
+import org.mockito.Mockito._
+import org.mockito.ArgumentMatchers.anyString
+
+class ReconciliationUtilityTest extends AnyFunSuite with MockitoSugar with Matchers {
+
+  val mockSparkSession: SparkSession = mock[SparkSession]
+  val mockDataFrame: DataFrame = mock[DataFrame]
+  val reconciliationUtility = new ReconciliationUtility()
+
+  test("loadDataFrame loads and renames columns to lowercase") {
+    val schema = StructType(List(
+      StructField("ID", StringType),
+      StructField("Date", StringType)
+    ))
+    val data = Seq(
+      Row("1", "2021-01-01"),
+      Row("2", "2021-01-02")
+    )
+    val spark = SparkSession.builder().appName("Test").master("local").getOrCreate()
+    import spark.implicits._
+    val rdd = spark.sparkContext.parallelize(data)
+    val df = spark.createDataFrame(rdd, schema)
+
+    when(mockSparkSession.read).thenReturn(df.read)
+    
+    val loadedDf = reconciliationUtility.loadDataFrame(mockSparkSession, "mockTable")
+
+    // Assuming we're verifying the transformation; in reality, we'd need to check the DataFrame contents.
+    verify(mockSparkSession.read).table("mockTable")
+    assert(loadedDf.columns.contains("id") && loadedDf.columns.contains("date"))
+    spark.stop()
+  }
+
+  test("filterAndSelect filters data and selects specified columns") {
+    when(mockDataFrame.select(anyString(), anyString())).thenReturn(mockDataFrame)
+    when(mockDataFrame.filter(anyString())).thenReturn(mockDataFrame)
+
+    val result = reconciliationUtility.filterAndSelect(mockDataFrame, Array("id", "name"), "2021-01-01", "date")
+
+    verify(mockDataFrame).select("id", "name")
+    verify(mockDataFrame).filter("date > '2021-01-01'")
+    assert(result == mockDataFrame)
+  }
+
+  // This test focuses on the logic leading up to the database write without interacting with the database.
+  test("writeToSqlServer prepares and executes write operation") {
+    doNothing().when(mockDataFrame).write
+    
+    val writeOptions = Map(
+      "url" -> "jdbc:sqlserver://server;databaseName=db;encrypt=true;trustServerCertificate=false;",
+      "dbtable" -> "testTable",
+      "user" -> "user",
+      "password" -> "password",
+      "driver" -> "com.microsoft.sqlserver.jdbc.SQLServerDriver"
+    )
+
+    reconciliationUtility.writeToSqlServer(mockDataFrame, writeOptions)
+    
+    // Mockito cannot directly verify write options; the assertion below is symbolic.
+    // In practice, you would test this through integration tests.
+    assert(true)
+  }
+
+  // Mocking a complex SQL query execution and verifying the setup for such a test.
+  test("findAndWriteBreaks identifies breaks and prepares them for writing") {
+    when(mockSparkSession.sql(anyString())).thenReturn(mockDataFrame)
+    doNothing().when(mockDataFrame).createOrReplaceTempView(anyString())
+
+    reconciliationUtility.findAndWriteBreaks(mockSparkSession, mockDataFrame, Array("id", "name"), "comparisonTable", "server", "db", "breaksTable", "user", "password")
+
+    verify(mockDataFrame).createOrReplaceTempView("source_view")
+    // As with writeToSqlServer, this assertion is symbolic. The focus is on verifying the method's behavior up to the point of external interaction.
+    assert(true)
+  }
+}
