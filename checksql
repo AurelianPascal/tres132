@@ -1,0 +1,22 @@
+DECLARE @TableName NVARCHAR(256), @SchemaName NVARCHAR(256), @Sql NVARCHAR(MAX), @RowCount INT
+-- Cursor to loop through the tables
+DECLARE TableCursor CURSOR FOR
+SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'xyz'
+
+OPEN TableCursor
+FETCH NEXT FROM TableCursor INTO @SchemaName, @TableName
+
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    -- Dynamic SQL to get row count for the current table
+    SET @Sql = N'SELECT @RowCountOUT = COUNT(*) FROM [' + @SchemaName + '].[' + @TableName + ']'
+    EXEC sp_executesql @Sql, N'@RowCountOUT INT OUTPUT', @RowCount OUTPUT
+    
+    -- Print the table name and its row count
+    PRINT 'Table [' + @SchemaName + '].[' + @TableName + '] has ' + CAST(@RowCount AS NVARCHAR) + ' rows.'
+    
+    FETCH NEXT FROM TableCursor INTO @SchemaName, @TableName
+END
+
+CLOSE TableCursor
+DEALLOCATE TableCursor
