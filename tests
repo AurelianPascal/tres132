@@ -99,3 +99,32 @@ test("filterColumnsStartsWith - include true") {
     assert(result.columns.sameElements(Array("id", "name", "salary")))
     assert(result.collect()(0).getAs[String]("name") == "Alice")
   }
+
+
+##
+
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.Row
+
+test("loadDataFrame should load a DataFrame and convert column names to lowercase") {
+  // Step 1: Create a DataFrame with uppercase column names
+  val schema = StructType(
+    List(
+      StructField("ID", IntegerType, nullable = false),
+      StructField("NAME", StringType, nullable = false)
+    )
+  )
+  
+  val data = spark.sparkContext.parallelize(Seq(Row(1, "Alice"), Row(2, "Bob")))
+  val dfWithUpperCaseColumns = spark.createDataFrame(data, schema)
+  
+  // Step 2: Create a temporary view from this DataFrame
+  dfWithUpperCaseColumns.createOrReplaceTempView("test_table")
+  
+  // Step 3: Invoke loadDataFrame on this "table"
+  val loadedDf = ReconciliationUtility.loadDataFrame(spark, "test_table")
+  
+  // Step 4: Assert that all column names in the returned DataFrame are lowercase
+  assert(loadedDf.columns.forall(_.forall(_.isLower)), "Not all columns are lowercase")
+}
+
