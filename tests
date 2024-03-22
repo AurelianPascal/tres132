@@ -1,0 +1,58 @@
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.types.{StructField, StructType, StringType}
+import org.apache.spark.sql.functions.{col, lit}
+import org.scalatest.FunSuite
+import org.scalatest.BeforeAndAfter
+
+class DataFrameAlignmentTest extends FunSuite with BeforeAndAfter {
+
+  var spark: SparkSession = _
+
+  before {
+    // Initialize SparkSession
+    spark = SparkSession.builder()
+      .master("local")
+      .appName("DataFrame Alignment Test")
+      .getOrCreate()
+  }
+
+  after {
+    if (spark != null) {
+      spark.stop()
+    }
+  }
+
+  test("Column Renaming and Addition") {
+    // Sample DataFrame
+    val df = spark.createDataFrame(Seq(
+      (1, "Alice"),
+      (2, "Bob")
+    )).toDF("id", "name")
+
+    // Column mappings: Original Column Name -> New Column Name
+    val columnMappings = Map("id" -> "customer_id", "name" -> "customer_name", "age" -> "customer_age")
+
+    // Expected Schema
+    val expectedSchema = StructType(List(
+      StructField("customer_id", StringType, true),
+      StructField("customer_name", StringType, true),
+      StructField("customer_age", StringType, true)
+    ))
+
+    // Align DataFrame
+    val alignedDf = alignDataFrameWithMappings(spark, df, columnMappings)
+
+    // Test Column Renaming and Addition
+    assert(alignedDf.schema === expectedSchema)
+
+    // Test Data Integrity
+    val rows = alignedDf.collect()
+    assert(rows(0).getAs[String]("customer_name") === "Alice")
+    assert(rows(1).getAs[String]("customer_name") === "Bob")
+
+    // Test Null Values for Added Columns
+    assert(rows.forall(_.isNullAt(alignedDf.schema.fieldIndex("customer_age"))))
+  }
+
+  // More tests can be added here to cover edge cases, such as empty mappings, DataFrame, or duplicate column names.
+}
