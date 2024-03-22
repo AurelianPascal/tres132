@@ -128,3 +128,52 @@ test("loadDataFrame should load a DataFrame and convert column names to lowercas
   assert(loadedDf.columns.forall(_.forall(_.isLower)), "Not all columns are lowercase")
 }
 
+
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.DataFrame
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
+import org.mockito.Mockito._
+import org.mockito.ArgumentMatchers._
+
+class FindAndWriteBreaksTest extends AnyFlatSpec with Matchers {
+
+  "findAndWriteBreaks" should "find breaks and write to SQL Server" in {
+    // Mock SparkSession and DataFrame
+    val mockSpark = mock(classOf[SparkSession])
+    val mockSourceDf = mock(classOf[DataFrame])
+    val mockBreaksDf = mock(classOf[DataFrame])
+
+    // Stub the source DataFrame to simulate the creation of a temp view
+    doNothing().when(mockSourceDf).createOrReplaceTempView("source_view")
+
+    // Stub SparkSession.sql to return the mockBreaksDf DataFrame
+    when(mockSpark.sql(anyString())).thenReturn(mockBreaksDf)
+
+    // Stub for writeToSqlServer (assuming you can access it for mocking)
+    // You may need to adjust this part depending on how you can intercept or mock this call
+    doNothing().whenStatic(classOf[YourTestClass]).writeToSqlServer(any[DataFrame], any[Map[String, String]])
+
+    // Prepare parameters for the function
+    val selectColumns = Array("uuid", "event_version", "event_lastupdated")
+    val comparisonTableName = "comparisonTable"
+    val serverName = "server"
+    val databaseName = "database"
+    val breaksTableName = "breaksTable"
+    val user = "user"
+    val password = "password"
+
+    // Call the function under test
+    YourTestClass.findAndWriteBreaks(mockSpark, mockSourceDf, selectColumns, comparisonTableName, serverName, databaseName, breaksTableName, user, password)
+
+    // Verify that the correct SQL query was executed
+    verify(mockSpark).sql(contains("FROM source_view s LEFT JOIN comparisonTable c"))
+
+    // Verify that the breaks DataFrame was attempted to be written to SQL Server with correct parameters
+    // Again, adjust verification based on your mocking strategy for writeToSqlServer
+    verifyStatic(classOf[YourTestClass])
+    YourTestClass.writeToSqlServer(eq(mockBreaksDf), any[Map[String, String]])
+  }
+}
+
+
