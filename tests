@@ -211,5 +211,44 @@ class YourTestObjectTest extends AnyFlatSpec with Matchers with MockitoSugar {
 }
 
 
+trait SqlServerWriter {
+  def writeToSqlServer(df: DataFrame, options: Map[String, String]): Unit
+}
+
+
+import org.apache.spark.sql.{DataFrame, SparkSession}
+
+object YourTestObject extends SqlServerWriter {
+  def findAndWriteBreaks(spark: SparkSession, sourceDf: DataFrame, comparisonTableName: String,
+                         serverName: String, databaseName: String, breaksTableName: String, user: String, password: String): Unit = {
+    sourceDf.createOrReplaceTempView("source_view")
+
+    val comparisonQuery = s"""
+      SELECT s.*
+      FROM source_view s
+      LEFT JOIN $comparisonTableName c ON s.uuid = c.uuid
+      WHERE c.uuid IS NULL
+    """
+
+    val breaksDf = spark.sql(comparisonQuery)
+
+    val jdbcUrl = s"jdbc:sqlserver://$serverName;databaseName=$databaseName;user=$user;password=$password;"
+    val writeOptions = Map(
+      "url" -> jdbcUrl,
+      "dbtable" -> breaksTableName,
+      "driver" -> "com.microsoft.sqlserver.jdbc.SQLServerDriver"
+    )
+
+    writeToSqlServer(breaksDf, writeOptions)
+  }
+
+  override def writeToSqlServer(df: DataFrame, options: Map[String, String]): Unit = {
+    println(s"Writing DataFrame to SQL Server at ${options("url")} into table ${options("dbtable")}")
+    // Actual implementation to write df to SQL Server would go here
+  }
+}
+
+
+
 
 
