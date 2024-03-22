@@ -1,0 +1,53 @@
+import org.apache.spark.sql.{SparkSession, DataFrame}
+import org.apache.spark.sql.functions._
+import org.scalatest.BeforeAndAfterAll
+import org.scalatest.funsuite.AnyFunSuite
+
+object ReconciliationUtilityTest extends AnyFunSuite with BeforeAndAfterAll {
+
+  var spark: SparkSession = _
+
+  override def beforeAll(): Unit = {
+    spark = SparkSession.builder()
+      .appName("ReconciliationUtilityTests")
+      .master("local[*]")
+      .getOrCreate()
+  }
+
+  override def afterAll(): Unit = {
+    spark.stop()
+  }
+
+  test("loadDataFrame should load a DataFrame and convert column names to lowercase") {
+    // Assuming the presence of a `test_table` in the SparkSession
+    val loadedDf = ReconciliationUtility.loadDataFrame(spark, "test_table")
+    assert(loadedDf.columns.forall(_.isLower))
+  }
+
+  test("filterAndSelect should filter rows and select specified columns") {
+    val sourceData = Seq(
+      ("2024-01-01", "Alice", 100),
+      ("2024-02-01", "Bob", 200),
+      ("2024-03-01", "Charlie", 300)
+    )
+    val sourceDf = spark.createDataFrame(sourceData).toDF("date", "name", "amount")
+    val selectColumns = Array("name", "amount")
+    val filterDate = "2024-01-15"
+    val dateColumn = "date"
+
+    val filteredDf = ReconciliationUtility.filterAndSelect(sourceDf, selectColumns, filterDate, dateColumn)
+
+    assert(filteredDf.columns.sameElements(selectColumns))
+    assert(filteredDf.count() == 2)
+  }
+
+  // Placeholder for writeToSqlServer test
+  // This test would require mocking or integrating with an actual database for a meaningful test.
+
+  // Placeholder for findAndWriteBreaks test
+  // Similar to writeToSqlServer, testing this method effectively requires either mocking external dependencies or integration testing with a database setup.
+
+  // Placeholder for runReconciliation test
+  // Testing runReconciliation involves verifying the end-to-end process, likely necessitating a combination of mocks for external interactions and real Spark operations for data processing.
+
+}
