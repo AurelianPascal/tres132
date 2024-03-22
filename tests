@@ -56,3 +56,46 @@ class DataFrameAlignmentTest extends FunSuite with BeforeAndAfter {
 
   // More tests can be added here to cover edge cases, such as empty mappings, DataFrame, or duplicate column names.
 }
+
+
+###############
+
+test("filterColumnsStartsWith - include true") {
+    val df = spark.createDataFrame(Seq(
+      (1, "Alice", 100),
+      (2, "Bob", 200)
+    )).toDF("id", "name", "salary")
+
+    val result = filterColumnsStartsWith(df, Seq("name", "sal"), include = true)
+    assert(result.columns.sameElements(Array("name", "salary")))
+  }
+
+  test("filterColumnsStartsWith - include false") {
+    val df = spark.createDataFrame(Seq(
+      (1, "Alice", 100),
+      (2, "Bob", 200)
+    )).toDF("id", "name", "salary")
+
+    val result = filterColumnsStartsWith(df, Seq("name", "sal"), include = false)
+    assert(result.columns.sameElements(Array("id")))
+  }
+
+  test("alignDataFramesSchemas") {
+    val df1 = spark.createDataFrame(Seq((1, "Alice"))).toDF("Id", "Name")
+    val df2 = spark.createDataFrame(Seq((100, "Engineering"))).toDF("salary", "department")
+
+    val result = alignDataFramesSchemas(Seq(df1, df2))
+    assert(result.forall(_.columns.length == 4))
+    assert(result.head.columns.contains("id"))
+    assert(result.head.columns.contains("name"))
+    assert(result.head.columns.contains("salary"))
+    assert(result.head.columns.contains("department"))
+  }
+
+  test("toLowerCaseDF") {
+    val df = spark.createDataFrame(Seq((1, "Alice", 100))).toDF("ID", "Name", "Salary")
+    val result = toLowerCaseDF(df)
+
+    assert(result.columns.sameElements(Array("id", "name", "salary")))
+    assert(result.collect()(0).getAs[String]("name") == "Alice")
+  }
