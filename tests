@@ -176,4 +176,40 @@ class FindAndWriteBreaksTest extends AnyFlatSpec with Matchers {
   }
 }
 
+#####
+
+import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
+import org.scalatestplus.mockito.MockitoSugar
+import org.mockito.Mockito._
+import org.mockito.ArgumentMatchers._
+
+class YourTestObjectTest extends AnyFlatSpec with Matchers with MockitoSugar {
+
+  "YourTestObject" should "find breaks and write to SQL Server" in {
+    val mockSparkSession = mock[SparkSession]
+    val mockSourceDf = mock[DataFrame]
+    val mockBreaksDf = mock[DataFrame]
+    val sqlWriterMock = mock[SqlServerWriter]
+
+    // Assuming YourTestObject can somehow use a mocked SqlServerWriter (not shown here)
+    val yourTestObjectUnderTest = YourTestObject
+    yourTestObjectUnderTest.sqlWriter = sqlWriterMock // This line is pseudo-code
+
+    when(mockSparkSession.sql(any[String])).thenReturn(mockBreaksDf)
+    doNothing().when(mockSourceDf).createOrReplaceTempView(anyString())
+
+    yourTestObjectUnderTest.findAndWriteBreaks(
+      mockSparkSession, mockSourceDf, "comparisonTable", "serverName", "databaseName",
+      "breaksTableName", "user", "password"
+    )
+
+    verify(mockSparkSession).sql(contains("FROM source_view s LEFT JOIN comparisonTable c"))
+    verify(sqlWriterMock).writeToSqlServer(eq(mockBreaksDf), any[Map[String, String]])
+  }
+}
+
+
+
 
