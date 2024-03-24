@@ -35,6 +35,67 @@ trait BreakFinder {
 }
 
 
+####################
+import ReconciliationUtil.DefaultBreakFinder
+import misc.ConnectionFactory
+import org.apache.spark.sql.SparkSession
+import org.mockito.ArgumentMatchers._
+import org.mockito.Mockito._
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatestplus.mockito.MockitoSugar
+
+import java.sql.{CallableStatement, Connection}
+
+class DefaultBreakFinderTest extends AnyFunSuite with MockitoSugar {
+  test("findAndWriteBreaks prepares and executes stored procedure with correct parameters") {
+    // Preparation: Create mocks
+    val mockConnection = mock[Connection]
+    val mockCallableStatement = mock[CallableStatement]
+    val mockConnectionFactory = mock[ConnectionFactory]
+    val spark = SparkSession.builder().appName("Test").master("local").getOrCreate()
+    val dataWriter = mock[DataWriter]
+
+    // Stubbing: Define behavior of mocks
+    when(mockConnectionFactory.getConnection(anyString, anyString, anyString)).thenReturn(mockConnection)
+    when(mockConnection.prepareCall(anyString)).thenReturn(mockCallableStatement)
+
+    // Create an instance of the class under test
+    val finder = new DefaultBreakFinder(spark, dataWriter, mockConnectionFactory)
+    val tableName = "testTable"
+    val comparisonTableName = "comparisonTestTable"
+    val daysBack = 5
+    val joinColumn = "testID"
+    val writeOptions = Map(
+      "url" -> "jdbc:sqlserver://localhost:1433;databaseName=testDB",
+      "user" -> "testerUser",
+      "password" -> "testPwd"
+    )
+
+    // Execute the method under test
+    finder.findAndWriteBreaks(tableName, comparisonTableName, daysBack, joinColumn, writeOptions)
+
+    // Verification: Ensure the correct methods are called on the mocks with expected parameters
+    verify(mockConnectionFactory).getConnection("jdbc:sqlserver://localhost:1433;databaseName=testDB", "testerUser", "testPwd")
+    verify(mockConnection).prepareCall("{call CompareAndWriteBreaks(?, ?, ?, ?)}")
+    verify(mockCallableStatement).setString(1, tableName)
+    verify(mockCallableStatement).setString(2, comparisonTableName)
+    verify(mockCallableStatement).setInt(3, daysBack)
+    verify(mockCallableStatement).setString(4, joinColumn)
+    verify(mockCallableStatement).execute()
+
+    // Verify that resources are cleaned up
+  //  verify(mockCallableStatement).close()
+   verify(mockConnection).close()
+
+    // Cleanup: Stop the Spark session
+    spark.stop()
+  }
+}
+
+''''''''''''''''''''
+
+
+
 
 ##java
 
@@ -63,4 +124,44 @@ public class DriverManagerConnectionFactory implements ConnectionFactory {
     }
 }
 
+
+##java test
+
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
+import org.scalatestplus.mockito.MockitoSugar
+import org.mockito.Mockito._
+import org.mockito.{MockedStatic, Mockito}
+
+class DriverManagerConnectionFactoryTest extends AnyFlatSpec with Matchers with MockitoSugar {
+
+  "DriverManagerConnectionFactory" should "create a connection using DriverManager" in {
+    // Use Mockito's mockStatic method to mock the DriverManager class
+    val mockDriverManager: MockedStatic[DriverManager] = Mockito.mockStatic(classOf[DriverManager])
+
+    try {
+      val mockConnection = mock[Connection]
+      // When DriverManager.getConnection is called with any strings, then return the mockConnection
+      mockDriverManager.when(() => DriverManager.getConnection(anyString(), anyString(), anyString())).thenReturn(mockConnection)
+
+      // Instantiate your DriverManagerConnectionFactory
+      val factory = new DriverManagerConnectionFactory()
+
+      // Attempt to get a connection
+      val url = "jdbc:example:url"
+      val user = "testUser"
+      val password = "testPass"
+      val connection = factory.getConnection(url, user, password)
+
+      // Verify the connection received is the mock connection
+      connection shouldBe mockConnection
+
+      // Verify DriverManager was called with the expected values
+      mockDriverManager.verify(() => DriverManager.getConnection(url, user, password))
+    } finally {
+      // Ensure the static mock is closed to avoid side effects in other tests
+      mockDriverManager.close()
+    }
+  }
+}
 
