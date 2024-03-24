@@ -1,0 +1,66 @@
+import java.sql.{Connection, CallableStatement}
+  import org.apache.spark.sql.SparkSession
+
+  // Assuming ConnectionFactory and DataWriter are defined elsewhere
+  class DefaultBreakFinder(spark: SparkSession, dataWriter: DataWriter, connectionFactory: ConnectionFactory) extends BreakFinder {
+    override def findAndWriteBreaks(tableName: String, comparisonTableName: String, daysBack: Int, joinColumn: String, writeOptions: Map[String, String]): Unit = {
+      println("findAndWriteBreaks...")
+      val jdbcUrl = writeOptions.getOrElse("url", throw new IllegalArgumentException("DB URL not provided in writeOptions"))
+      val user = writeOptions.getOrElse("user", throw new IllegalArgumentException("DB user not provided in writeOptions"))
+      val password = writeOptions.getOrElse("password", throw new IllegalArgumentException("DB password not provided in writeOptions"))
+
+      var connection: Connection = null
+      try {
+        // Use the connection factory to get the connection instead of DriverManager directly
+        connection = connectionFactory.getConnection(jdbcUrl, user, password)
+        val callableStatement: CallableStatement = connection.prepareCall("{call CompareAndWriteBreaks(?, ?, ?, ?)}")
+
+        callableStatement.setString(1, tableName)
+        callableStatement.setString(2, comparisonTableName)
+        callableStatement.setInt(3, daysBack)
+        callableStatement.setString(4, joinColumn)
+
+        callableStatement.execute()
+        println("Stored procedure executed successfully")
+      } catch {
+        case e: Exception => println("Exception:" + e.printStackTrace())
+      } finally {
+        if (connection != null) connection.close()
+      }
+    }
+  }
+
+trait BreakFinder {
+   def findAndWriteBreaks(tableName: String, comparisonTableName: String, daysBack: Int, joinColumn: String, writeOptions: Map[String, String]): Unit
+}
+
+
+
+##java
+
+package misc;
+
+import java.sql.Connection;
+import java.sql.SQLException;
+
+public interface ConnectionFactory {
+    Connection getConnection(String url, String user, String password) throws SQLException;
+}
+
+package misc;
+
+##java2
+
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+
+public class DriverManagerConnectionFactory implements ConnectionFactory {
+
+    public Connection getConnection(String url, String user, String password) throws SQLException {
+        return DriverManager.getConnection(url, user, password);
+    }
+}
+
+
