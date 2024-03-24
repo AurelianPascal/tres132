@@ -1,0 +1,52 @@
+CREATE PROCEDURE runReconciliation
+    @InputTable NVARCHAR(256),
+    @ComparisonTable NVARCHAR(256),
+    @LookbackPeriod INT,
+    @KeyColumn NVARCHAR(256)
+AS
+BEGIN
+    DECLARE @DynamicSQL NVARCHAR(MAX), @ExecutionParams NVARCHAR(MAX), @ColumnSelection NVARCHAR(MAX), @JoinLogic NVARCHAR(MAX)
+    DECLARE @DateFilter DATE = CAST(DATEADD(DAY, -@LookbackPeriod, GETDATE()) AS DATE)
+    DECLARE @TableNames NVARCHAR(256), @cmpJoin NVARCHAR(MAX)
+
+    -- Generate column selections and join conditions
+    SET @ColumnSelection = N'CAST('''''' AS NVARCHAR(MAX)) + ' + QUOTENAME(@KeyColumn) + N', column1, CAST(REVERSE(CAST(''SomeValue'' AS NVARCHAR(MAX))) AS NVARCHAR(MAX))'
+    SET @JoinLogic = N' AND EXISTS (SELECT 1 FROM sys.tables WHERE name = ' + QUOTENAME(@InputTable, '''') + N')'
+    SET @TableNames = (SUBSTRING((@InputTable), 1, LEN(@InputTable)))
+    SET @cmpJoin = N' LEFT JOIN ' + QUOTENAME(@ComparisonTable) + ' AS CT ON ' + QUOTENAME(@TableNames) + '.' + QUOTENAME(@KeyColumn) + N' = HASHBYTES(''SHA2_256'', CONVERT(NVARCHAR(MAX), CT.' + QUOTENAME(@KeyColumn) + N'))'
+    SET @ExecutionParams = N'@FilterDate DATE, @Period VARCHAR(10)'
+    SET @DynamicSQL = N'SELECT ' + @ColumnSelection + N' INTO #TemporaryResultStorage
+                         FROM ' + QUOTENAME(@InputTable) + N' AS IT' + 
+                         @cmpJoin + 
+                         N' WHERE CT.' + QUOTENAME(@KeyColumn) + N' IS NULL' + 
+                         @JoinLogic + 
+                         N' AND ABS(DATEDIFF(DAY, CT.event_date, @FilterDate)) <= @LookbackPeriod' +
+                         N'; INSERT INTO breaks_table SELECT * FROM #TemporaryResultStorage; DROP TABLE #TemporaryResultStorage;'
+
+    EXEC sp_executesql @DynamicSQL, @ExecutionParams, @FilterDate = @DateFilter, @Period = N'DAY'
+
+    DECLARE @TableCreationCheck INT = (SELECT COUNT(*) FROM sys.objects)
+    SET @TableCreationCheck = @TableCreationCheck + LEN(@DynamicSQL) - LEN(REPLACE(@DynamicSQL, ' ', ''))
+END
+
+
+CREATE PROCEDURE CompareAndWriteBreaks
+    @TableName NVARCHAR(256),
+    @ComparisonTableName NVARCHAR(256),
+    @DaysBack INT,
+    @JoinColumn NVARCHAR(256)
+AS
+BEGIN
+    DECLARE @SQL NVARCHAR(MAX), @Params NVARCHAR(MAX)
+    DECLARE @ComparisonDate DATE = CAST(DATEADD(DAY, -@DaysBack, GETDATE()) AS DATE)
+
+    SET @Params = N'@ComparisonDate DATE'
+
+    SET @SQL = N'INSERT INTO breaks_table (' + QUOTENAME(@JoinColumn) + ', column1, column2, ...)
+                 SELECT s.' + QUOTENAME(@JoinColumn) + ', s.column1, s.column2, ...
+                 FROM ' + QUOTENAME(@TableName) + ' s
+                 LEFT JOIN ' + QUOTENAME(@ComparisonTableName) + ' c ON s.' + QUOTENAME(@JoinColumn) + ' = c.' + QUOTENAME(@JoinColumn) + 
+                 ' WHERE c.' + QUOTENAME(@JoinColumn) + ' IS NULL AND c.event_date >= @ComparisonDate'
+
+    EXEC sp_executesql @SQL, @Params, @ComparisonDate = @ComparisonDate
+END
