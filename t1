@@ -1,0 +1,101 @@
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.functions._
+import org.scalatest.BeforeAndAfter
+import org.scalatest.funsuite.AnyFunSuite
+import org.apache.spark.sql.DataFrame
+
+class DataFrameTest extends AnyFunSuite with BeforeAndAfter {
+
+  var spark: SparkSession = _
+
+  before {
+    // Initialize SparkSession
+    spark = SparkSession.builder()
+      .appName("DataFrameTest")
+      .master("local[*]")
+      .getOrCreate()
+  }
+
+  after {
+    if (spark != null) {
+      spark.stop()
+    }
+  }
+
+  def repartitionAndDeduplicate(df: DataFrame, columnName: String, partitionCount: Int): DataFrame = {
+    df.repartition(partitionCount)
+      .dropDuplicates(columnName)
+  }
+
+  test("repartitionAndDeduplicate removes duplicates and repartitions the DataFrame") {
+    import spark.implicits._
+    
+    // Create test data
+    val testData = Seq(
+      (1, "Alice"),
+      (2, "Bob"),
+      (1, "Alice"), // Duplicate
+      (3, "Charlie")
+    ).toDF("id", "name")
+
+    // Expected data after removing duplicates based on "id"
+    val expectedData = Seq(
+      (1, "Alice"),
+      (2, "Bob"),
+      (3, "Charlie")
+    ).toDF("id", "name").coalesce(1) // Coalesce to 1 partition for easy comparison
+
+    // Apply the function under test
+    val result = repartitionAndDeduplicate(testData, "id", 1) // Repartition to 1 for testing
+
+    // Collect and compare the results
+    assert(result.collect().sorted === expectedData.collect().sorted)
+  }
+}
+####
+
+import org.apache.spark.sql.SparkSession
+import org.scalatest.BeforeAndAfter
+import org.scalatest.funsuite.AnyFunSuite
+import org.apache.spark.sql.DataFrame
+
+class DataFrameFunctionsTest extends AnyFunSuite with BeforeAndAfter {
+
+  var spark: SparkSession = _
+
+  before {
+    // Initialize SparkSession
+    spark = SparkSession.builder()
+      .appName("DataFrameFunctionsTest")
+      .master("local[*]")
+      .getOrCreate()
+  }
+
+  after {
+    if (spark != null) {
+      spark.stop()
+    }
+  }
+
+  test("addNewIDField correctly adds ID and version fields") {
+    import spark.implicits._
+
+    // Create test data
+    val testData = Seq(
+      (1, "A", "v1"),
+      (2, "B", "v2")
+    ).toDF("id", "key", "version")
+
+    // Expected data
+    val expectedData = Seq(
+      (1, "A", "v1", "A_v1", "v1"),
+      (2, "B", "v2", "B_v2", "v2")
+    ).toDF("id", "key", "version", "newID", "json_version")
+
+    // Apply the function under test
+    val result = addNewIDField(testData, "json", "key", "version", "newID")
+
+    // Check the result
+    assert(result.collect().sorted sameElements expectedData.collect().sorted)
+  }
+}
