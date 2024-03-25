@@ -1,0 +1,52 @@
+CREATE PROCEDURE CompareAndWriteBreaks
+    @DFTableName NVARCHAR(256),
+    @ComparisonTableName NVARCHAR(256),
+    @LookBackDays INT,
+    @JoinColumn NVARCHAR(256),
+    @ShouldTruncate BIT = 0, -- Optional parameter with a default value of 0 (do not truncate)
+    @BreaksTableName NVARCHAR(256) = 'default_breaks_table' -- Default breaks table, can be overridden
+AS
+BEGIN
+    DECLARE @SQL NVARCHAR(MAX), @Params NVARCHAR(MAX)
+    DECLARE @ComparisonDate DATE = CAST(DATEADD(DAY, -@LookBackDays, GETDATE()) AS DATE)
+
+    -- Conditionally truncate @DFTableName if @ShouldTruncate is set to 1
+    IF @ShouldTruncate = 1
+    BEGIN
+        SET @SQL = N'TRUNCATE TABLE ' + QUOTENAME(@DFTableName)
+        EXEC sp_executesql @SQL
+    END
+
+    SET @Params = N'@ComparisonDate DATE'
+
+    -- Use @BreaksTableName as the destination for the insert operation
+    SET @SQL = N'INSERT INTO ' + QUOTENAME(@BreaksTableName) + ' (' + QUOTENAME(@JoinColumn) + ', column1, column2, ...)
+                 SELECT s.' + QUOTENAME(@JoinColumn) + ', s.column1, s.column2, ...
+                 FROM ' + QUOTENAME(@DFTableName) + ' s
+                 LEFT JOIN ' + QUOTENAME(@ComparisonTableName) + ' c ON s.' + QUOTENAME(@JoinColumn) + ' = c.' + QUOTENAME(@JoinColumn) + 
+                 ' WHERE c.' + QUOTENAME(@JoinColumn) + ' IS NULL AND c.event_date >= @ComparisonDate'
+
+    EXEC sp_executesql @SQL, @Params, @ComparisonDate = @ComparisonDate
+END
+
+
+EXEC CompareAndWriteBreaks
+    @DFTableName = N'source_table',
+    @ComparisonTableName = N'comparison_table',
+    @LookBackDays = 30,
+    @JoinColumn = N'common_id';
+
+
+EXEC CompareAndWriteBreaks
+    @DFTableName = N'source_table',
+    @ComparisonTableName = N'comparison_table',
+    @LookBackDays = 30,
+    @JoinColumn = N'common_id',
+    @BreaksTableName = N'alternative_breaks_table';
+
+EXEC CompareAndWriteBreaks
+    @DFTableName = N'source_table',
+    @ComparisonTableName = N'comparison_table',
+    @LookBackDays = 30,
+    @JoinColumn = N'common_id',
+    @ShouldTruncate = 1; -- Enable truncating the source
